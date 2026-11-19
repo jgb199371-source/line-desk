@@ -320,6 +320,7 @@ const dec=a=>a>0?1+a/100:1+100/-a;
 const OA='https://api.the-odds-api.com/v4/sports/';
 const BOOKS=['pinnacle','draftkings','fanduel','betmgm','betrivers','espnbet','hardrockbet','bovada','betonlineag','ballybet'];
 const US_KEYS=['draftkings','fanduel','betmgm','betrivers','espnbet','hardrockbet','bovada','betonlineag','ballybet','lowvig','mybookieag','betus','betparx','fliff','williamhill_us','fanatics'];
+let remT=0;async function refreshRem(force){const k=ls.get('ld:oak');if(!k||(!force&&Date.now()-remT<60000))return;remT=Date.now();try{const r=await fetch(OA+'?apiKey='+encodeURIComponent(k));const rem=r.headers.get('x-requests-remaining');if(r.ok&&rem!=null){const old=ls.get('ld:oarem');ls.set('ld:oarem',Math.floor(+rem));if(old!==Math.floor(+rem)){if(st.events.length)renderBoard();const ev=st.events.find(e=>e.id===st.sel);if(ev){const b=$('#books');if(b&&b.querySelector('#bkGo'))renderBooks(ev,false)}const km=$('#kMsg');if(km&&!$('#keyp').hidden)km.textContent='Key saved'+remTxt()+'.'}}}catch(_){}}
 const remTxt=()=>{const r=ls.get('ld:oarem');return r!=null?` · ${r} credits left this month`:''};
 function alertKey(e){const m=e.message==='nokey'?'Add your Odds API key first (Sportsbooks button).':'Odds API: '+e.message;const el=$('#bookMsg')||$('#kMsg');if(el)el.textContent=m;$('#stamp').textContent=m}
 async function oaLeague(lg,force){const key=ls.get('ld:oak');if(!key)throw new Error('nokey');const c=st.oa[lg.oa]||(()=>{const x=ls.get('ld:oa:'+lg.oa);return x&&x.d?x:null})();
@@ -376,7 +377,7 @@ async function renderBooks(ev,force){const box=$('#books');if(!box)return;const 
   $('#betOdds').value=fA(c.a);if(col[2]!=='ml')$('#betLine').value=col[2]==='spread'?fL(c.pt):c.pt;$('#betBook').value=r.book;
   const f=F[k];if(f&&(col[2]==='ml'||f.pt===c.pt))$('#calcP').value=(f.p*100).toFixed(1);calc();
   $('#logMsg').textContent=`Loaded ${r.book} ${col[2]==='ml'?col[1]:col[2]==='spread'?fL(c.pt):col[1]+' '+c.pt} ${fA(c.a)}. Win % set to the market's fair number.`;$('#calcSide').scrollIntoView({block:'center'})}}
-$('#kBtn').onclick=()=>{const p=$('#keyp');p.hidden=!p.hidden;if(!p.hidden){$('#kIn').value='';$('#kIn').placeholder=ls.get('ld:oak')?'Key saved — paste a new one to replace':'Paste the key from your email';$('#kMsg').textContent=ls.get('ld:oak')?'Key saved'+remTxt()+'.':'';$('#kIn').focus()}};
+$('#kBtn').onclick=()=>{const p=$('#keyp');p.hidden=!p.hidden;if(!p.hidden){refreshRem(true);$('#kIn').value='';$('#kIn').placeholder=ls.get('ld:oak')?'Key saved — paste a new one to replace':'Paste the key from your email';$('#kMsg').textContent=ls.get('ld:oak')?'Key saved'+remTxt()+'.':'';$('#kIn').focus()}};
 $('#kSave').onclick=async()=>{const k=$('#kIn').value.trim();if(!/^[A-Za-z0-9]{20,64}$/.test(k)){$('#kMsg').textContent="That doesn't look like an Odds API key.";return}
  $('#kMsg').textContent='Checking key…';try{const r=await fetch(OA+'?apiKey='+encodeURIComponent(k));const rem=r.headers.get('x-requests-remaining');if(!r.ok){let m='HTTP '+r.status;try{m=(await r.json()).message||m}catch(_){}throw new Error(m)}
   ls.set('ld:oak',k);if(rem!=null)ls.set('ld:oarem',Math.floor(+rem));$('#kIn').value='';$('#kMsg').textContent='Key works and is saved in this browser'+remTxt()+'. Checking keys costs no credits.';renderBoard();const ev=st.events.find(e=>e.id===st.sel);if(ev)renderBooks(ev,false)}catch(e){$('#kMsg').textContent='Key rejected: '+e.message}};
@@ -692,7 +693,7 @@ $('#sySave').onclick=async()=>{const t=$('#syIn').value.trim();if(!/^(ghp_|githu
  const old=ls.get('ld:ghTok');ls.set('ld:ghTok',t);try{const u=await gh('/user');$('#syIn').value='';syStatus('Connected as '+u.login+'. Syncing…');await syncNow()}catch(e){ls.set('ld:ghTok',old);syStatus('Token rejected: '+e.message)}};
 $('#syNow').onclick=syncNow;
 $('#syDel').onclick=()=>{ls.set('ld:ghTok',null);ls.set('ld:gist',null);syStatus('Disconnected. Your bets stay on this device and in your GitHub gist.')};
-addEventListener('focus',()=>window.__ldSync());document.addEventListener('visibilitychange',()=>{if(!document.hidden)window.__ldSync()});
+addEventListener('focus',()=>{window.__ldSync();refreshRem()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){window.__ldSync();refreshRem()}});
 function setDate(d){st.date=d?ymd(d):'';$('#date').value=d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'';st.sel=null;loadBoard()}
 const curDate=()=>{const v=$('#date').value;return v?new Date(v+'T12:00'):new Date()};
 const defDate=()=>st.lg.s==='Football'?null:new Date();
@@ -706,7 +707,7 @@ $('#date').onchange=()=>setDate($('#date').value?new Date($('#date').value+'T12:
 $('#q').oninput=renderBoard;
 $('#reload').onclick=()=>loadBoard(true);
 $('#auto').onchange=()=>{clearInterval(st.timer);if($('#auto').checked)st.timer=setInterval(()=>loadBoard(true),60000)};
-renderNav();setDate(defDate());renderSlip();if(ls.get('ld:ghTok')){syStatus('');syncNow()}
+renderNav();setDate(defDate());renderSlip();if(ls.get('ld:ghTok')){syStatus('');syncNow()}refreshRem(true);
 }
 </script>
 </body>
