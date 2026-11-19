@@ -143,7 +143,8 @@ const LG=[
  {k:'nfl',oa:'americanfootball_nfl',s:'Football',p:'football/nfl',n:'NFL',q:''},
  {k:'cfb',oa:'americanfootball_ncaaf',s:'Football',p:'football/college-football',n:'College FB',q:'&groups=80'},
  {k:'nba',oa:'basketball_nba',s:'Basketball',p:'basketball/nba',n:'NBA',q:''},
- {k:'cbb',oa:'basketball_ncaab',s:'Basketball',p:'basketball/mens-college-basketball',n:'College BB',q:'&groups=50'},
+ {k:'cbb',oa:'basketball_ncaab',s:'Basketball',p:'basketball/mens-college-basketball',n:"Men's CBB",q:'&groups=50'},
+ {k:'wcbb',oa:'basketball_wncaab',s:'Basketball',p:'basketball/womens-college-basketball',n:"Women's CBB",q:'&groups=50'},
  {k:'wnba',oa:'basketball_wnba',s:'Basketball',p:'basketball/wnba',n:'WNBA',q:''},
  {k:'nhl',oa:'icehockey_nhl',s:'Hockey',p:'hockey/nhl',n:'NHL',q:''},
  {k:'mlb',oa:'baseball_mlb',s:'Baseball',p:'baseball/mlb',n:'MLB',q:''},
@@ -264,16 +265,10 @@ async function closing(lg,id){const key='ld:cl:'+lg.p+':'+id;const c=ls.get(key)
  const h=team(comps.find(x=>x.homeAway==='home')||{}),a=team(comps.find(x=>x.homeAway==='away')||{});
  const o=parseOdds((s.pickcenter||[]).find(p=>p.pointSpread||p.spread!=null||p.overUnder!=null)||(s.pickcenter||[])[0],h,a);
  const r=o?{hl:o.hl,tot:o.tot,hm:o.hm,am:o.am}:{none:1};const done=g(s,'header','competitions',0,'status','type','completed');if(done)ls.set(key,r);return r}
-async function trends(lg,t,N){
- const sc=await J(API+lg.p+'/teams/'+t.id+'/schedule',3e5);
- const evs=(sc.events||[]).filter(e=>g(e,'competitions',0,'status','type','completed')).sort((x,y)=>new Date(y.date)-new Date(x.date)).slice(0,N);
- const rows=await pool(evs,6,async e=>{const c=e.competitions[0];const me=c.competitors.find(x=>String(x.id)===t.id),op=c.competitors.find(x=>String(x.id)!==t.id);if(!me||!op)return null;
-  const ms=scoreOf(me),os=scoreOf(op);if(ms==null||os==null)return null;const cl=await closing(lg,e.id);
-  const home=me.homeAway==='home';const line=cl.hl==null?null:home?cl.hl:-cl.hl;const myMl=home?cl.hm:cl.am,opMl=home?cl.am:cl.hm;
-  const m=ms-os,r=line==null?null:m+line;const tot=cl.tot;
-  const fav=line!=null&&line!==0?line<0:(myMl!=null&&opMl!=null?myMl<opMl:null);
-  return{date:e.date,opp:g(op,'team','abbreviation')||'',home,score:`${ms}-${os}`,su:m>0?'W':m<0?'L':'T',line,ats:r==null?null:r>0?'W':r<0?'L':'P',cm:r,tot,ou:tot==null?null:ms+os>tot?'O':ms+os<tot?'U':'P',fav}});
- return rows.filter(Boolean)}
+async function trends(lg,t,N){const R=await teamGames(lg,t,N);
+ return R.map(e=>{const cl=e.cl||{},home=e.home,ms=e.ms,os=e.os;const line=cl.hl==null?null:home?cl.hl:-cl.hl;const myMl=home?cl.hm:cl.am,opMl=home?cl.am:cl.hm;
+  const m=ms-os,r=line==null?null:m+line;const tot=cl.tot;const fav=line!=null&&line!==0?line<0:(myMl!=null&&opMl!=null?myMl<opMl:null);
+  return{date:e.date,opp:e.opp,home,score:`${ms}-${os}`,su:m>0?'W':m<0?'L':'T',line,ats:r==null?null:r>0?'W':r<0?'L':'P',cm:r,tot,ou:tot==null?null:ms+os>tot?'O':ms+os<tot?'U':'P',fav}})}
 function rec(rows,f,k,a,b){const r=rows.filter(f).filter(x=>x[k]!=null);const w=r.filter(x=>x[k]===a).length,l=r.filter(x=>x[k]===b).length,p=r.filter(x=>x[k]==='P').length;return{w,l,p,n:w+l,txt:`${w}-${l}${p?'-'+p:''}`,pct:w+l?w/(w+l):null}}
 function trendHTML(t,rows,isHome,isFav){
  if(!rows.length)return`<div class="th"><img src="${esc(t.logo)}" alt="">${esc(t.name)}</div><p class="note">No completed games with lines found yet.</p>`;
@@ -299,6 +294,8 @@ async function openGame(id){
  <div id="mk">${marketHTML(ev)}</div><h3>Compare sportsbooks</h3><div id="books"></div><div id="model"></div>
  <h3>Value calculator</h3><div class="calc"><label>Bet<select id="calcSide"></select></label><label>Your win probability %<input id="calcP" type="number" min="1" max="99" step="0.5" inputmode="decimal"></label><label>Bankroll $<input id="calcB" type="number" min="0" step="10" value="${esc(ls.get('ld:bank')??500)}"></label><label>Kelly fraction<select id="calcK"><option value="0.25">¼ Kelly</option><option value="0.5">½ Kelly</option><option value="1">Full Kelly</option></select></label></div><div class="out" id="calcOut"></div>
  <div class="calc" style="margin-top:12px"><label>Odds you got<input id="betOdds" inputmode="numeric"></label><label>Line you got<input id="betLine" inputmode="decimal"></label><label>Stake $<input id="betStake" type="number" min="0" step="1"></label><input type="hidden" id="betBook"><button class="btn pri" id="logBet">Log this bet</button><button class="btn" id="addLeg">Add to parlay</button></div><p class="note" id="logMsg"></p><p class="note">Starts at the market's fair probability, so the edge reads near zero until you put in your own number.</p>
+ <h3>Halves, quarters and periods</h3><div id="periods"><div class="skel">Loading period scoring…</div></div>
+ <h3>Player props</h3><div id="props"></div>
  <h3>Betting trends <span class="note" id="trN"></span></h3><div class="two" id="tr"><div class="skel">Working out ${esc(ev.away.abbr)}'s record against the spread…</div><div class="skel">Working out ${esc(ev.home.abbr)}'s record against the spread…</div></div>
  <p class="note">Calculated from each team's recent completed games and the closing lines ESPN kept for them (${esc(LINE[lg.s])} at the closing number). Outlined tiles match this game's situation.</p>
  <h3>Injuries</h3><div id="inj"><div class="skel">Loading…</div></div><div id="h2h"></div>`;
@@ -308,7 +305,8 @@ async function openGame(id){
  J(API+lg.p+'/summary?event='+id,30000).then(s=>{if(st.sel!==id)return;$('#model').innerHTML=modelHTML(ev,s);$('#inj').innerHTML=injHTML(s);
   const ss=(s.seasonseries||[])[0];if(ss&&ss.summary)$('#h2h').innerHTML=`<h3>Head to head</h3><p>${esc(ss.summary)}</p>`;
   const pk=(s.pickcenter||[])[0];if(pk&&!ev.odds){ev.odds=parseOdds(pk,ev.home,ev.away);renderMarket(ev)}}).catch(()=>{$('#inj').innerHTML='<p class="note">Game details unavailable right now.</p>'});
- const N=lg.s==='Baseball'||lg.s==='Hockey'||lg.k==='nba'?20:15;$('#trN').textContent='· last '+N+' games each';
+ renderPeriods(ev,false);renderProps(ev,false);
+ const N=nGames(lg);$('#trN').textContent='· last '+N+' games each';
  const fav=ev.odds&&ev.odds.hl!=null&&ev.odds.hl!==0?ev.odds.hl<0:(ev.odds&&ev.odds.hm!=null&&ev.odds.am!=null?ev.odds.hm<ev.odds.am:null);
  const [ta,th]=await Promise.all([trends(lg,ev.away,N).catch(()=>[]),trends(lg,ev.home,N).catch(()=>[])]);
  if(st.sel!==id)return;$('#tr').innerHTML=`<div>${trendHTML(ev.away,ta,false,fav==null?null:!fav)}</div><div>${trendHTML(ev.home,th,true,fav)}</div>`;
@@ -346,7 +344,8 @@ function fairs(rows,ev){const F={};const soc=st.lg.s==='Soccer';const pin=rows.f
  const to=mode(rows.filter(r=>r.to_over&&r.to_under).map(r=>r.to_over.pt));if(to!=null){const L=rows.filter(r=>r.to_over&&r.to_under&&r.to_over.pt===to).map(r=>noVig([r.to_over.a,r.to_under.a]).p);if(L.length){F.to_over={p:L.reduce((s,a)=>s+a[0],0)/L.length,pt:to,n:L.length};F.to_under={p:L.reduce((s,a)=>s+a[1],0)/L.length,pt:to,n:L.length}}}
  Object.keys(F).forEach(k=>{if(!F[k].src)F[k].src='avg'});Object.assign(F,P);return F}
 const cellScore=(k,c)=>k.startsWith('sp_')?c.pt*10+dec(c.a):k==='to_over'?-c.pt*10+dec(c.a):k==='to_under'?c.pt*10+dec(c.a):dec(c.a);
-function edges(ev,d){const m=oaMatch(d,ev);if(!m)return null;const rows=bookRows(m),F=fairs(rows,ev);
+function edges(ev,d){const m=oaMatch(d,ev);if(!m)return null;const rows=bookRows(m),F=fairs(rows,ev);return edgesFrom(ev,rows,F)}
+function edgesFrom(ev,rows,F){
  return COLS(ev).map(([k,lab,mk,sd])=>{const cs=rows.filter(r=>r[k]&&r.key!=='pinnacle');if(!cs.length)return null;const b=cs.reduce((x,y)=>cellScore(k,y[k])>cellScore(k,x[k])?y:x);const c=b[k],f=F[k];
   const ok=f&&(mk==='ml'||c.pt===f.pt);const lab2=mk==='ml'?lab:mk==='spread'?`${sd==='home'?ev.home.abbr:ev.away.abbr} ${fL(c.pt)}`:`${lab} ${c.pt}`;
   return{k,lab:lab2,mk,sd,book:b.book,a:c.a,pt:c.pt,fair:f?f.p:null,ev:ok?f.p*dec(c.a)-1:null}}).filter(Boolean)}
@@ -360,7 +359,7 @@ async function renderBooks(ev,force){const box=$('#books');if(!box)return;const 
  if(!m){box.innerHTML=`<p class="note">The Odds API doesn't list this game yet (it may be too far out, finished, or named differently).</p>`;return}
  const rows=bookRows(m),F=fairs(rows,ev),C=COLS(ev).filter(([k])=>rows.some(r=>r[k])),E=edges(ev,x.d)||[];
  const best={};E.forEach(e=>best[e.k]=e);
- const cell=(k,c,i)=>{if(!c)return'<td></td>';const isB=best[k]&&best[k].book===rows[i].book&&best[k].a===c.a&&best[k].pt===c.pt;const t=k.startsWith('ml')?fA(c.a):k.startsWith('sp')?`${fL(c.pt)} <small>${fA(c.a)}</small>`:`${c.pt} <small>${fA(c.a)}</small>`;return`<td class="r"><button class="${isB?'best':''}" data-k="${k}" data-i="${i}" title="Use in calculator">${t}</button></td>`};
+ const cell=(k,c,i)=>{if(!c)return'<td></td>';const isB=best[k]&&best[k].book===rows[i].book&&best[k].a===c.a&&best[k].pt===c.pt;const t=k.startsWith('ml')?fA(c.a):k.startsWith('sp')?`${fL(c.pt)} <small>${fA(c.a)}</small>`:`${c.pt} <small>${fA(c.a)}</small>`;if(rows[i].key==='pinnacle')return`<td class="r num" style="padding-right:12px">${t}</td>`;return`<td class="r"><button class="${isB?'best':''}" data-k="${k}" data-i="${i}" title="Use in calculator">${t}</button></td>`};
  rows.sort((a,b)=>(b.key==='pinnacle')-(a.key==='pinnacle')||a.book.localeCompare(b.book));
  box.innerHTML=`<div class="scroll"><table class="bk"><thead><tr><th>Book</th>${C.map(c=>`<th class="r">${esc(c[1])}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr${r.key==='pinnacle'?' style="background:var(--chip)"':''}><td>${r.key==='pinnacle'?'<b>Pinnacle</b> <span class="note">sharp reference</span>':esc(r.book)}</td>${C.map(([k])=>cell(k,r[k],i)).join('')}</tr>`).join('')}</tbody>
  <tfoot><tr><td>Fair price</td>${C.map(([k])=>`<td class="r num">${F[k]?(F[k].pt!=null&&!k.startsWith('ml')?(k.startsWith('sp')?fL(F[k].pt):F[k].pt)+' ':'')+fA(fair(F[k].p))+`<br><span class="note">${F[k].src==='Pinnacle'?'Pinnacle':'avg'}</span>`:'—'}</td>`).join('')}</tr>
@@ -394,9 +393,7 @@ function logBet(ev,S){const msg=$('#logMsg'),r=buildBet(ev,S,true);if(r.err){msg
  msg.innerHTML=`Logged <b>${esc(b.label)} ${fA(b.odds)}</b> for $${b.stake.toFixed(2)}. It settles itself under My bets after the game.`}
 const getSlip=()=>{const L=ls.get('ld:slip');return Array.isArray(L)?L:[]};
 function addLeg(ev,S){const msg=$('#logMsg'),r=buildBet(ev,S,false);if(r.err){msg.textContent=r.err;return}const l=r.b;delete l.stake;
- const L=getSlip();if(L.some(x=>x.ev===l.ev&&x.m===l.m&&x.sd===l.sd)){msg.textContent='That leg is already on your slip.';return}
- if(L.some(x=>x.ev===l.ev&&x.m===l.m)){msg.textContent="You can't parlay both sides of the same market.";return}
- L.push(l);ls.set('ld:slip',L);msg.innerHTML=`Added <b>${esc(l.label)} ${fA(l.odds)}</b> to your parlay slip (${L.length} leg${L.length>1?'s':''}).`;renderSlip()}
+ addLegObj(l,msg)}
 const toAm=D=>D>=2?(D-1)*100:-100/(D-1);
 function renderSlip(){const el=$('#slip'),L=getSlip();document.body.style.paddingBottom=L.length?(ls.get('ld:slipMin')?'70px':'min(72vh,520px)'):'';if(!L.length){el.hidden=true;return}el.hidden=false;
  if(ls.get('ld:slipMin')){const D0=L.reduce((x,l)=>x*dec(l.odds),1);el.innerHTML=`<button class="btn pri" id="slOpen" style="width:100%">Parlay slip · ${L.length} leg${L.length>1?'s':''} · ${fA(Math.round(toAm(D0)))} — open</button>`;el.style.padding='6px';$('#slOpen').onclick=()=>{ls.set('ld:slipMin',false);renderSlip()};return}el.style.padding='';
@@ -419,7 +416,7 @@ function renderSlip(){const el=$('#slip'),L=getSlip();document.body.style.paddin
   if(o==null||Math.abs(o)<100){$('#slMsg').textContent='Odds look wrong.';return}if(!(k>0)){$('#slMsg').textContent='Enter a stake.';return}
   const ds=L2.map(l=>new Date(l.date).getTime());const p={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:'parlay',ts:Date.now(),date:new Date(Math.min(...ds)).toISOString(),lastDate:new Date(Math.max(...ds)).toISOString(),lgn:'Parlay',sport:'Parlay',label:`${L2.length}-leg parlay`,legs:L2.map(l=>({...l,status:'pending'})),odds:Math.round(o),calcOdds:A,stake:k,book:$('#slB').value.trim(),fairAtBet:pf,status:'pending'};
   const B=getB();B.push(p);ls.set('ld:bets',B);ls.set('ld:stake',k);ls.set('ld:slip',[]);renderSlip();const m=$('#logMsg');if(m)m.innerHTML=`Logged your <b>${L2.length}-leg parlay ${fA(p.odds)}</b> for $${k.toFixed(2)}. Find it under My bets → Parlays.`;if(!$('#betsView').hidden)renderBets()}}
-async function evalBet(b){const s=await J(API+b.p+'/summary?event='+b.ev,60000);const comp=g(s,'header','competitions',0);if(!comp)return b;
+async function evalBet(b){if(b.per||b.m==='prop')return evalSpecial(b);const s=await J(API+b.p+'/summary?event='+b.ev,60000);const comp=g(s,'header','competitions',0);if(!comp)return b;
  const cs=comp.competitors||[],hc=cs.find(x=>x.homeAway==='home'),ac=cs.find(x=>x.homeAway==='away');if(!hc||!ac)return b;
  const h=team(hc),a=team(ac),done=!!g(comp,'status','type','completed');
  const o=parseOdds((s.pickcenter||[]).find(p=>p.pointSpread||p.moneyline||p.spread!=null)||(s.pickcenter||[])[0],h,a);
@@ -457,7 +454,7 @@ function summ(L){const S=L.filter(b=>b.status!=='pending'),w=S.filter(b=>b.statu
  const prof=S.reduce((x,b)=>x+(b.profit||0),0),stk=S.reduce((x,b)=>x+b.stake,0),cv=S.filter(b=>b.clvPct!=null),bt=S.filter(b=>b.clvPct!=null||b.clvPts!=null);
  return{n:S.length,rec:`${w}-${l}${pu?'-'+pu:''}`,prof,roi:stk?prof/stk:null,clv:cv.length?cv.reduce((x,b)=>x+b.clvPct,0)/cv.length:null,exp:cv.length?cv.reduce((x,b)=>x+b.stake*b.clvPct,0):null,beat:bt.filter(b=>(b.clvPct!=null?b.clvPct:b.clvPts)>0).length,bn:bt.length}}
 const SEGP={legs:['Legs',b=>String(b.legs.length).padStart(2,'0')+' · '+b.legs.length+' legs'],mix:['Leagues',b=>[...new Set(b.legs.map(l=>l.lgn))].sort().join(' + ')],sg:['Same game?',b=>b.legs.length!==new Set(b.legs.map(l=>l.ev)).size?'Has same-game legs':'All different games'],book:['Sportsbook',b=>b.book||'Not recorded']};
-const SEG={league:['League',b=>b.lgn],type:['Bet type',b=>({ml:'Moneyline',spread:'Spread / puck / run line',total:'Total'})[b.m]],side:['Fav / dog',b=>b.m==='total'?(b.sd==='over'?'Over':'Under'):b.sd==='draw'?'Draw':b.m==='spread'&&b.line===0?'Pick em':(b.m==='ml'?b.odds<0:b.line<0)?'Favorite':'Underdog'],timing:['When you bet',b=>{const h=(new Date(b.date)-b.ts)/36e5;return h<1?'1 · Under 1 hour before':h<6?'2 · 1–6 hours before':h<24?'3 · 6–24 hours before':h<72?'4 · 1–3 days before':'5 · 3+ days before'}],book:['Sportsbook',b=>b.book||'Not recorded']};
+const SEG={league:['League',b=>b.lgn],type:['Bet type',b=>b.m==='prop'?'Player prop':b.per?b.per.n+' line':({ml:'Moneyline',spread:'Spread / puck / run line',total:'Total'})[b.m]],side:['Fav / dog',b=>b.m==='total'?(b.sd==='over'?'Over':'Under'):b.sd==='draw'?'Draw':b.m==='spread'&&b.line===0?'Pick em':(b.m==='ml'?b.odds<0:b.line<0)?'Favorite':'Underdog'],timing:['When you bet',b=>{const h=(new Date(b.date)-b.ts)/36e5;return h<1?'1 · Under 1 hour before':h<6?'2 · 1–6 hours before':h<24?'3 · 6–24 hours before':h<72?'4 · 1–3 days before':'5 · 3+ days before'}],book:['Sportsbook',b=>b.book||'Not recorded']};
 function SGP_fix(){SEGP.timing=SEG.timing}
 function parlayInsight(D){const legs=D.flatMap(b=>b.legs).filter(l=>l.status==='W'||l.status==='L');const hit=legs.filter(l=>l.status==='W').length;const one=D.filter(b=>b.status==='L'&&b.legs.filter(l=>l.status==='L').length===1).length;return legs.length?`Your legs hit ${hit}/${legs.length} (${Math.round(hit/legs.length*100)}%). ${one} parlay${one===1?'':'s'} lost by a single leg. Keep in mind each extra leg multiplies the book's cut, so parlays need a bigger edge per leg than straight bets.`:''}
 function insight(t){if(!t.n)return'';if(t.n<30)return`Only ${t.n} settled bet${t.n>1?'s':''}, so profit is mostly luck at this point. Average CLV and how often you beat the close are the numbers to watch until you pass 50–100 bets.`;
@@ -485,6 +482,181 @@ $('#bSettle').onclick=updateBets;
 $('#bTable').onclick=e=>{const d=e.target.closest('[data-del]');if(!d)return;if(!d.dataset.armed){d.dataset.armed=1;d.textContent='Sure?';setTimeout(()=>{if(d.isConnected){delete d.dataset.armed;d.textContent='Delete'}},3000);return}ls.set('ld:del',[...new Set((ls.get('ld:del')||[]).concat(d.dataset.del))]);ls.set('ld:bets',getB().filter(b=>b.id!==d.dataset.del));renderBets()};
 $('#bExport').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(getB(),null,1)],{type:'application/json'}));a.download='line-desk-bets-'+ymd(new Date())+'.json';document.body.appendChild(a);a.click();a.remove();$('#bMsg').textContent='Backup saved to your downloads.'};
 $('#bImport').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const arr=JSON.parse(await f.text());if(!Array.isArray(arr))throw 0;const m=new Map(getB().map(b=>[b.id,b]));arr.forEach(b=>{if(b&&b.id&&(b.ev||b.legs))m.set(b.id,b)});ls.set('ld:bets',[...m.values()]);$('#bMsg').textContent=`Imported ${arr.length} bets.`;renderBets()}catch(_){$('#bMsg').textContent="That file isn't a Line Desk backup."}e.target.value=''};
+/* ---------- game extras: period scores + compact box scores ---------- */
+const nPart=(v,i)=>{if(v==null)return null;const p=String(v).split(/[-\/]/);return num(p[i]??'')};
+const n1=(r,k)=>nPart(r[k],0),n2=(r,k)=>nPart(r[k],1);
+const sumN=(...a)=>a.some(x=>x==null)?null:a.reduce((p,c)=>p+c,0);
+const PSTAT={
+ Basketball:{pts:r=>n1(r,'points'),reb:r=>n1(r,'rebounds'),ast:r=>n1(r,'assists'),threes:r=>n1(r,'threePointFieldGoalsMade-threePointFieldGoalsAttempted'),blk:r=>n1(r,'blocks'),stl:r=>n1(r,'steals'),tov:r=>n1(r,'turnovers'),min:r=>n1(r,'minutes')},
+ Football:{passYds:r=>n1(r,'passing.passingYards'),passTD:r=>n1(r,'passing.passingTouchdowns'),comp:r=>n1(r,'passing.completions/passingAttempts'),att:r=>n2(r,'passing.completions/passingAttempts'),int:r=>n1(r,'passing.interceptions'),rushYds:r=>n1(r,'rushing.rushingYards'),rushAtt:r=>n1(r,'rushing.rushingAttempts'),rec:r=>n1(r,'receiving.receptions'),recYds:r=>n1(r,'receiving.receivingYards')},
+ Hockey:{g:r=>n1(r,'goals'),a:r=>n1(r,'assists'),sog:r=>n1(r,'shotsTotal'),blk:r=>n1(r,'blockedShots'),sv:r=>n1(r,'saves')},
+ Baseball:{h:r=>n1(r,'batting.hits'),hr:r=>n1(r,'batting.homeRuns'),rbi:r=>n1(r,'batting.RBIs'),runs:r=>n1(r,'batting.runs'),k:r=>n1(r,'pitching.strikeouts'),outs:r=>{const v=r['pitching.fullInnings.partInnings'];if(v==null)return null;const [a,b]=String(v).split('.');return num(a)==null?null:num(a)*3+(num(b)||0)},er:r=>n1(r,'pitching.earnedRuns')}
+};
+const PROPM={
+ Basketball:[['player_points','Points',v=>v.pts,1],['player_rebounds','Rebounds',v=>v.reb,1],['player_assists','Assists',v=>v.ast,1],['player_threes','Threes made',v=>v.threes,1],['player_points_rebounds_assists','Pts + Reb + Ast',v=>sumN(v.pts,v.reb,v.ast)],['player_blocks','Blocks',v=>v.blk],['player_steals','Steals',v=>v.stl]],
+ Football:[['player_pass_yds','Passing yards',v=>v.passYds,1],['player_rush_yds','Rushing yards',v=>v.rushYds,1],['player_receptions','Receptions',v=>v.rec,1],['player_reception_yds','Receiving yards',v=>v.recYds,1],['player_pass_tds','Passing TDs',v=>v.passTD],['player_pass_completions','Completions',v=>v.comp],['player_rush_attempts','Rush attempts',v=>v.rushAtt],['player_pass_interceptions','Interceptions thrown',v=>v.int]],
+ Hockey:[['player_shots_on_goal','Shots on goal',v=>v.sog,1],['player_points','Points',v=>sumN(v.g,v.a),1],['player_assists','Assists',v=>v.a],['player_blocked_shots','Blocked shots',v=>v.blk],['player_total_saves','Goalie saves',v=>v.sv,1]],
+ Baseball:[['pitcher_strikeouts','Pitcher strikeouts',v=>v.k,1],['batter_hits','Hits',v=>v.h,1],['pitcher_outs','Pitcher outs',v=>v.outs],['batter_home_runs','Home runs',v=>v.hr],['batter_rbis','RBIs',v=>v.rbi],['batter_runs_scored','Runs scored',v=>v.runs]]
+};
+const propDef=(sport,mk)=>(PROPM[sport]||[]).find(x=>x[0]===mk);
+function compactBox(s,sport){const out={},defs=PSTAT[sport];if(!defs)return out;
+ for(const t of g(s,'boxscore','players')||[]){const tid=String(g(t,'team','id'));
+  for(const c of t.statistics||[]){const keys=c.keys||[];const cat=c.name||(keys.includes('atBats')?'batting':keys.includes('fullInnings.partInnings')?'pitching':'stats');
+   for(const a of c.athletes||[]){if(a.didNotPlay||!a.stats||!a.stats.length)continue;const id=String(g(a,'athlete','id'));
+    const o=out[id]||(out[id]={n:g(a,'athlete','displayName')||'',tm:tid,raw:{}});keys.forEach((k,i)=>{o.raw[cat+'.'+k]=a.stats[i];if(o.raw[k]==null)o.raw[k]=a.stats[i]})}}}
+ for(const id in out){const o=out[id];o.v={};for(const [k,f] of Object.entries(defs)){const x=f(o.raw);if(x!=null&&!isNaN(x))o.v[k]=x}delete o.raw;if(!Object.keys(o.v).length||(sport==='Basketball'&&!(o.v.min>0)))delete out[id]}return out}
+async function gx(lg,id){const key='ld:gx:'+lg.p+':'+id;const c=ls.get(key);if(c)return c;
+ const s=await J(API+lg.p+'/summary?event='+id,3e6);const comp=g(s,'header','competitions',0)||{};const cs=comp.competitors||[];
+ const pick=ha=>{const c=cs.find(x=>x.homeAway===ha)||{};return{id:String(c.id||g(c,'team','id')||''),ls:(c.linescores||[]).map(x=>num(x.displayValue??x.value)??0),sc:num(c.score)}};
+ const r={h:pick('home'),a:pick('away'),box:compactBox(s,lg.s),done:!!g(comp,'status','type','completed')};
+ if(r.done){ls.set(key,r);const idx=(ls.get('ld:gxIdx')||[]).filter(k=>k!==key);idx.push(key);while(idx.length>600){try{localStorage.removeItem(idx.shift())}catch(_){}}ls.set('ld:gxIdx',idx)}return r}
+const tgMemo=new Map();
+function teamGames(lg,t,N){const key=lg.p+'|'+t.id+'|'+N;const m=tgMemo.get(key);if(m&&Date.now()-m.t<3e5)return m.p;
+ const p=(async()=>{const sc=await J(API+lg.p+'/teams/'+t.id+'/schedule',3e5);
+  const evs=(sc.events||[]).filter(e=>g(e,'competitions',0,'status','type','completed')).sort((x,y)=>new Date(y.date)-new Date(x.date)).slice(0,N);
+  const rows=await pool(evs,6,async e=>{const c=e.competitions[0];const me=c.competitors.find(x=>String(x.id)===t.id),op=c.competitors.find(x=>String(x.id)!==t.id);if(!me||!op)return null;
+   const ms=scoreOf(me),os=scoreOf(op);if(ms==null||os==null)return null;const [cl,x]=await Promise.all([closing(lg,e.id),gx(lg,e.id).catch(()=>null)]);
+   return{id:e.id,date:e.date,home:me.homeAway==='home',opp:g(op,'team','abbreviation')||'',oppId:String(op.id),ms,os,cl,x}});
+  return rows.filter(Boolean)})();
+ tgMemo.set(key,{t:Date.now(),p});p.catch(()=>tgMemo.delete(key));return p}
+const nGames=lg=>lg.s==='Baseball'||lg.s==='Hockey'||lg.k==='nba'?20:15;
+
+/* ---------- Odds API: per-event markets (periods, props) ---------- */
+async function oaEvents(lg){const c=st.oaEv&&st.oaEv[lg.oa];if(c&&Date.now()-c.t<6e5)return c.d;const key=ls.get('ld:oak');if(!key)throw new Error('nokey');
+ const r=await fetch(`${OA}${lg.oa}/events/?apiKey=${encodeURIComponent(key)}`);if(!r.ok){let m='HTTP '+r.status;try{m=(await r.json()).message||m}catch(_){}throw new Error(m)}
+ const d=await r.json();st.oaEv=st.oaEv||{};st.oaEv[lg.oa]={t:Date.now(),d};return d}
+async function oaEventOdds(lg,ev,markets){const key=ls.get('ld:oak');if(!key)throw new Error('nokey');
+ const m=oaMatch(await oaEvents(lg),ev);if(!m)throw new Error("The Odds API doesn't list this game yet.");
+ const q=`${OA}${lg.oa}/events/${m.x.id}/odds/?apiKey=${encodeURIComponent(key)}&markets=${markets.join(',')}&oddsFormat=american&`;
+ let r=await fetch(q+'bookmakers='+BOOKS.join(','));let wide=false;if(r.status===422||r.status===400){r=await fetch(q+'regions=us,eu');wide=true}
+ const rem=r.headers.get('x-requests-remaining');if(rem!=null)ls.set('ld:oarem',Math.floor(+rem));
+ if(!r.ok){let msg='HTTP '+r.status;try{msg=(await r.json()).message||msg}catch(_){}throw new Error(msg)}
+ let d=await r.json();if(wide)d={...d,bookmakers:(d.bookmakers||[]).filter(b=>b.key==='pinnacle'||US_KEYS.includes(b.key))};return{x:d,flip:m.flip,t:Date.now()}}
+
+/* ---------- shared book table + bet ticket ---------- */
+function bookTable(ev,rows,F,E,tag){const C=COLS(ev).filter(([k])=>rows.some(r=>r[k]));const best={};E.forEach(e=>best[e.k]=e);
+ rows.sort((a,b)=>(b.key==='pinnacle')-(a.key==='pinnacle')||a.book.localeCompare(b.book));
+ const cell=(k,c,i)=>{if(!c)return'<td></td>';const isB=best[k]&&best[k].book===rows[i].book&&best[k].a===c.a&&best[k].pt===c.pt;const t=k.startsWith('ml')?fA(c.a):k.startsWith('sp')?`${fL(c.pt)} <small>${fA(c.a)}</small>`:`${c.pt} <small>${fA(c.a)}</small>`;if(rows[i].key==='pinnacle')return`<td class="r num" style="padding-right:12px">${t}</td>`;return`<td class="r"><button class="${isB?'best':''}" data-t="${tag}" data-k="${k}" data-i="${i}" title="Bet this price">${t}</button></td>`};
+ return`<div class="scroll"><table class="bk"><thead><tr><th>Book</th>${C.map(c=>`<th class="r">${esc(c[1])}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr${r.key==='pinnacle'?' style="background:var(--chip)"':''}><td>${r.key==='pinnacle'?'<b>Pinnacle</b> <span class="note">reference</span>':esc(r.book)}</td>${C.map(([k])=>cell(k,r[k],i)).join('')}</tr>`).join('')}</tbody>
+ <tfoot><tr><td>Fair price</td>${C.map(([k])=>`<td class="r num">${F[k]?(F[k].pt!=null&&!k.startsWith('ml')?(k.startsWith('sp')?fL(F[k].pt):F[k].pt)+' ':'')+fA(fair(F[k].p))+`<br><span class="note">${F[k].src==='Pinnacle'?'Pinnacle':'avg'}</span>`:'—'}</td>`).join('')}</tr>
+ <tr><td>Best price EV</td>${C.map(([k])=>{const e=best[k];return`<td class="r num ${e&&e.ev!=null?(e.ev>0?'W':'L'):''}">${e&&e.ev!=null?(e.ev>0?'+':'')+(e.ev*100).toFixed(1)+'%':'—'}</td>`}).join('')}</tr></tfoot></table></div>`}
+const legKey=l=>[l.ev,l.m,l.per?l.per.k:'',l.prop?l.prop.pid+'|'+l.prop.mk:''].join('|');
+function addLegObj(l,msg){const L=getSlip();if(L.some(x=>legKey(x)===legKey(l)&&x.sd===l.sd)){msg.textContent='That leg is already on your slip.';return false}
+ if(L.some(x=>legKey(x)===legKey(l))){msg.textContent="You can't parlay both sides of the same market.";return false}
+ L.push(l);ls.set('ld:slip',L);msg.innerHTML=`Added <b>${esc(l.label)} ${fA(l.odds)}</b> to your parlay slip (${L.length} leg${L.length>1?'s':''}).`;renderSlip();return true}
+function openTicket(host,ev,sp){const tk=host.querySelector('.tk');if(!tk)return;
+ tk.innerHTML=`<div class="card" style="margin-top:10px;border-color:var(--acc)"><div class="row" style="justify-content:space-between"><b>${esc(sp.lab(sp.line))}</b><button class="del" data-x>Close</button></div>
+ <div class="calc" style="margin-top:6px"><label>Odds you got<input data-o inputmode="numeric" value="${fA(sp.odds)}"></label>${sp.m==='ml'?'':`<label>Line<input data-l inputmode="decimal" value="${sp.m==='spread'?fL(sp.line):sp.line}"></label>`}<label>Stake $<input data-s type="number" min="0" value="${esc(ls.get('ld:stake')??10)}"></label><label>Book<input data-b value="${esc(sp.book||'')}"></label></div>
+ <div class="row" style="margin-top:8px"><span class="note" data-ev></span></div>
+ <div class="row" style="margin-top:6px"><button class="btn pri" data-log>Log this bet</button><button class="btn" data-leg>Add to parlay</button><span class="note" data-msg></span></div></div>`;
+ const q=s=>tk.querySelector(s);const upd=()=>{const o=num(q('[data-o]').value),ln=q('[data-l]')?num(q('[data-l]').value):sp.line;const same=sp.m==='ml'||ln===sp.fairPt;
+  q('[data-ev]').innerHTML=sp.fair!=null&&same&&o!=null&&Math.abs(o)>=100?`Fair win chance ${pc(sp.fair)} · break-even ${pc(1/dec(o))} · EV <b class="${sp.fair*dec(o)-1>0?'W':'L'}">${((sp.fair*dec(o)-1)*100).toFixed(1)}%</b>`:(sp.fair!=null?'No fair price for this exact line.':'')};
+ tk.oninput=upd;upd();q('[data-x]').onclick=()=>{tk.innerHTML=''};
+ const build=need=>{const o=num(q('[data-o]').value),ln=sp.m==='ml'?null:num(q('[data-l]').value),k=parseFloat(q('[data-s]').value);
+  if(o==null||Math.abs(o)<100)return{err:'Enter American odds like -110 or +150.'};if(sp.m!=='ml'&&ln==null)return{err:'Enter the line.'};if(need&&!(k>0))return{err:'Enter a stake above $0.'};
+  return{b:{id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:Date.now(),p:st.lg.p,lgn:st.lg.n,sport:st.lg.s,ev:ev.id,date:ev.date,away:ev.away.abbr,home:ev.home.abbr,m:sp.m,sd:sp.sd,label:sp.lab(ln),line:ln,odds:o,stake:k,book:q('[data-b]').value.trim(),fairAtBet:sp.m==='ml'||ln===sp.fairPt?sp.fair??null:null,status:'pending',per:sp.per||undefined,prop:sp.prop||undefined}}};
+ q('[data-log]').onclick=()=>{const r=build(true),msg=q('[data-msg]');if(r.err){msg.textContent=r.err;return}const B=getB();B.push(r.b);ls.set('ld:bets',B);ls.set('ld:stake',r.b.stake);msg.innerHTML=`Logged <b>${esc(r.b.label)} ${fA(r.b.odds)}</b>. It settles itself under My bets.`};
+ q('[data-leg]').onclick=()=>{const r=build(false),msg=q('[data-msg]');if(r.err){msg.textContent=r.err;return}delete r.b.stake;addLegObj(r.b,msg)};
+ tk.scrollIntoView({block:'nearest'})}
+
+/* ---------- halves / quarters / periods ---------- */
+function perCfg(lg){if(lg.s==='Football')return[{k:'h1',n:'1st half',ps:[1,2]},{k:'q1',n:'1st quarter',ps:[1]}];
+ if(lg.k==='cbb')return[{k:'h1',n:'1st half',ps:[1]}];if(lg.s==='Basketball')return[{k:'h1',n:'1st half',ps:[1,2]},{k:'q1',n:'1st quarter',ps:[1]}];
+ if(lg.s==='Hockey')return[{k:'p1',n:'1st period',ps:[1]}];if(lg.s==='Baseball')return[{k:'1st_5_innings',n:'First 5 innings',ps:[1,2,3,4,5]}];
+ if(lg.s==='Soccer')return[{k:'h1',n:'1st half',ps:[1]}];return[]}
+const perShort=p=>({h1:'1H',q1:'1Q',p1:'1P','1st_5_innings':'F5'})[p.k]||p.n;
+function perRows(ev,res,P){const mp={};mp['h2h_'+P.k]='h2h';mp['spreads_'+P.k]='spreads';mp['totals_'+P.k]='totals';
+ const x={...res.x,bookmakers:(res.x.bookmakers||[]).map(b=>({...b,markets:(b.markets||[]).filter(m=>mp[m.key]).map(m=>({...m,key:mp[m.key]}))})).filter(b=>b.markets.length)};
+ return bookRows({x,flip:res.flip})}
+function perHist(rows,P,isHome){const need=Math.max(...P.ps);const G=rows.filter(r=>r.x&&r.x.h.ls.length>=need&&r.x.a.ls.length>=need).map(r=>{const me=r.home?r.x.h:r.x.a,op=r.home?r.x.a:r.x.h;const f=P.ps.reduce((t,p)=>t+(me.ls[p-1]||0),0),a=P.ps.reduce((t,p)=>t+(op.ls[p-1]||0),0);return{f,a,home:r.home}});
+ const n=G.length;if(!n)return null;const avg=k=>G.reduce((t,x)=>t+x[k],0)/n;return{n,G,f:avg('f'),a:avg('a'),w:G.filter(x=>x.f>x.a).length,l:G.filter(x=>x.f<x.a).length,t:G.filter(x=>x.f===x.a).length}}
+async function renderPeriods(ev,pull){const box=$('#periods');if(!box)return;const lg=st.lg,PS=perCfg(lg);if(!PS.length){box.innerHTML='<p class="note">No period markets for this league.</p>';return}
+ const key=!!ls.get('ld:oak'),cost=PS.length*3,c=st.pe&&st.pe[ev.id];
+ let res=c&&Date.now()-c.t<6e5?c:null,err='';
+ if(pull&&key){box.innerHTML='<div class="skel">Pulling period lines…</div>';try{res=await oaEventOdds(lg,ev,PS.flatMap(P=>['h2h_'+P.k,'spreads_'+P.k,'totals_'+P.k]));st.pe=st.pe||{};st.pe[ev.id]=res}catch(e){err=e.message==='nokey'?'Add your Odds API key first.':e.message}if(st.sel!==ev.id)return}
+ const N=nGames(lg);const [ra,rh]=await Promise.all([teamGames(lg,ev.away,N).catch(()=>[]),teamGames(lg,ev.home,N).catch(()=>[])]);if(st.sel!==ev.id)return;
+ let h=key?(res?`<p class="note">Lines pulled ${new Date(res.t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}${remTxt()}. Click a price to bet it. <button class="del" id="peRe">Re-check (~${cost} credits)</button></p>`:`<div class="scan"><button class="btn pri" id="peGo">Pull ${esc(PS.map(P=>P.n).join(' + '))} lines</button><span>About ${cost} credits for this game${remTxt()}</span></div>`):'<p class="note">Add your Odds API key (Sportsbooks button) to see period lines. Scoring history below is free.</p>';
+ if(err)h+=`<p class="note">${esc(err)}</p>`;
+ st.peRows={};
+ for(const P of PS){h+=`<h4 style="margin:16px 0 6px">${esc(P.n)}</h4>`;let F=null;
+  if(res){const rows=perRows(ev,res,P);if(rows.length){F=fairs(rows,ev);const E=edgesFrom(ev,rows,F);st.peRows[P.k]={rows,F,P};h+=bookTable(ev,rows,F,E,P.k)}else h+='<p class="note">No books are offering this market for this game right now.</p>'}
+  const A=perHist(ra,P,false),H=perHist(rh,P,true);
+  const sp=F&&F.sp_home?F.sp_home.pt:null,tt=F&&F.to_over?F.to_over.pt:null;
+  const row=(t,R,isH)=>{if(!R)return`<tr><td>${esc(t.abbr)}</td><td colspan="6" class="note">No period scores found.</td></tr>`;const line=sp==null?null:isH?sp:-sp;
+   const cov=line==null?null:R.G.filter(x=>x.f-x.a+line>0).length,ov=tt==null?null:R.G.filter(x=>x.f+x.a>tt).length;
+   return`<tr><td><b>${esc(t.abbr)}</b> <span class="note">last ${R.n}</span></td><td class="r num">${R.f.toFixed(1)}</td><td class="r num">${R.a.toFixed(1)}</td><td class="r num">${(R.f+R.a).toFixed(1)}</td><td class="num">${R.w}-${R.l}${R.t?'-'+R.t:''}</td><td class="r num">${cov==null?'—':`${cov}/${R.n} <span class="note">at ${fL(line)}</span>`}</td><td class="r num">${ov==null?'—':`${ov}/${R.n} <span class="note">o${tt}</span>`}</td></tr>`};
+  h+=`<div class="scroll"><table class="stack"><thead><tr><th>${esc(P.n)} history</th><th class="r">Scored</th><th class="r">Allowed</th><th class="r">Total</th><th>Won-lost${lg.s==='Soccer'||lg.s==='Hockey'?'-tied':''}</th><th class="r">Covers today's line</th><th class="r">Over today's total</th></tr></thead><tbody>${row(ev.away,A,false)}${row(ev.home,H,true)}</tbody></table></div>`}
+ h+='<p class="note">History uses each team\'s recent completed games. ESPN doesn\'t keep old period lines, so "covers today\'s line" checks past results against today\'s number.</p><div class="tk"></div>';
+ box.innerHTML=h;if($('#peGo'))$('#peGo').onclick=()=>renderPeriods(ev,true);if($('#peRe'))$('#peRe').onclick=()=>renderPeriods(ev,true);
+ box.onclick=e=>{const b=e.target.closest('button[data-t]');if(!b||!st.peRows[b.dataset.t])return;const {rows,F,P}=st.peRows[b.dataset.t],k=b.dataset.k,r=rows[+b.dataset.i],c=r[k];const col=COLS(ev).find(x=>x[0]===k);
+  const sd=col[3],m=col[2],tm=sd==='home'?ev.home.abbr:sd==='away'?ev.away.abbr:'',S=perShort(P);
+  const lab=ln=>m==='ml'?(tm?`${tm} ML ${S}`:`Draw ${S}`):m==='spread'?`${tm} ${fL(ln)} ${S}`:`${sd==='over'?'Over':'Under'} ${ln} ${S}`;
+  openTicket(box,ev,{m,sd,line:m==='ml'?null:c.pt,odds:c.a,book:r.book,fair:F[k]?F[k].p:null,fairPt:F[k]?F[k].pt:null,lab,per:{k:P.k,n:P.n,ps:P.ps}})}}
+
+/* ---------- player props ---------- */
+const nzP=s=>nz(String(s||'').replace(/\b(jr|sr|ii|iii|iv)\b\.?/gi,''));
+function playerIndex(lists){const I={};for(const [rows,team] of lists)for(const r of rows){if(!r.x)continue;for(const [pid,p] of Object.entries(r.x.box||{})){const myTeamId=r.home?r.x.h.id:r.x.a.id;if(p.tm!==myTeamId)continue;
+  const o=I[pid]||(I[pid]={pid,n:p.n,team,G:[]});o.G.push({date:r.date,opp:r.opp,oppId:r.oppId,home:r.home,v:p.v})}}
+ const byName={};Object.values(I).forEach(o=>{o.G.sort((a,b)=>new Date(b.date)-new Date(a.date));byName[nzP(o.n)]=o});return{I,byName}}
+function findPlayer(idx,name){const k=nzP(name);if(idx.byName[k])return idx.byName[k];const p=k.split(' ');const last=p[p.length-1],fi=(p[0]||'')[0];
+ return Object.values(idx.I).find(o=>{const q=nzP(o.n).split(' ');return q[q.length-1]===last&&(q[0]||'')[0]===fi})||null}
+function propRows(res,mk){const P={};for(const b of res.x.bookmakers||[]){const m=(b.markets||[]).find(x=>x.key===mk);if(!m)continue;
+  for(const o of m.outcomes||[]){const who=o.description||o.name;const side=/^over$/i.test(o.name)?'over':/^under$/i.test(o.name)?'under':null;if(!who||!side||o.point==null)continue;
+   const pl=P[who]||(P[who]={name:who,pts:{}});const L=pl.pts[o.point]||(pl.pts[o.point]={});const B=L[b.key]||(L[b.key]={book:b.title,key:b.key});B[side]=o.price}}
+ return Object.values(P).map(pl=>{const pts=Object.keys(pl.pts).map(Number);const pin=pts.find(p=>pl.pts[p].pinnacle&&pl.pts[p].pinnacle.over!=null&&pl.pts[p].pinnacle.under!=null);
+  const main=pin!=null?pin:pts.sort((a,b)=>Object.keys(pl.pts[b]).length-Object.keys(pl.pts[a]).length)[0];const L=pl.pts[main];
+  let fp=null,src='avg';if(L.pinnacle&&L.pinnacle.over!=null&&L.pinnacle.under!=null){fp=noVig([L.pinnacle.over,L.pinnacle.under]).p[0];src='Pinnacle'}
+  else{const two=Object.values(L).filter(x=>x.over!=null&&x.under!=null).map(x=>noVig([x.over,x.under]).p[0]);if(two.length)fp=two.reduce((a,b)=>a+b,0)/two.length}
+  const bets=Object.values(L).filter(x=>x.key!=='pinnacle');const bo=bets.filter(x=>x.over!=null).sort((a,b)=>dec(b.over)-dec(a.over))[0],bu=bets.filter(x=>x.under!=null).sort((a,b)=>dec(b.under)-dec(a.under))[0];
+  return{name:pl.name,line:main,fp,src,bo,bu,nBooks:bets.length,alts:pts.length-1}}).sort((a,b)=>a.name.localeCompare(b.name))}
+function hit(G,f,line,filt){const v=G.filter(filt||(()=>1)).map(x=>f(x.v)).filter(x=>x!=null);const o=v.filter(x=>x>line).length;return{n:v.length,o,avg:v.length?v.reduce((a,b)=>a+b,0)/v.length:null,v}}
+const hitTxt=h=>h.n?`<span class="${h.o/h.n>=.6?'W':h.o/h.n<=.4?'L':''}">${h.o}/${h.n}</span>`:'—';
+function spark(vals,line){const v=vals.slice(0,10).reverse();if(!v.length)return'';const mx=Math.max(line*1.6,...v,1);return`<svg width="${v.length*7}" height="22" aria-hidden="true" style="vertical-align:middle">${v.map((x,i)=>`<rect x="${i*7}" y="${22-Math.max(1,x/mx*22)}" width="5" height="${Math.max(1,x/mx*22)}" fill="${x>line?'var(--up)':'var(--dn)'}"/>`).join('')}<line x1="0" x2="${v.length*7}" y1="${22-line/mx*22}" y2="${22-line/mx*22}" stroke="currentColor" stroke-dasharray="2 2" opacity=".6"/></svg>`}
+async function renderProps(ev,pull){const box=$('#props');if(!box)return;const lg=st.lg,M=PROPM[lg.s];
+ if(!M){box.innerHTML='<p class="note">ESPN doesn\'t publish player box scores for soccer, so hit rates aren\'t available here yet.</p>';return}
+ const key=!!ls.get('ld:oak');const selKey='ld:pm:'+lg.s;let sel=ls.get(selKey);if(!Array.isArray(sel)||!sel.length)sel=M.filter(x=>x[3]).map(x=>x[0]);
+ const c=st.pr&&st.pr[ev.id];let res=c&&Date.now()-c.t<6e5?c:null,err='';
+ if(pull&&key&&sel.length){box.innerHTML='<div class="skel">Pulling player props…</div>';try{res=await oaEventOdds(lg,ev,sel);res.sel=sel.slice();st.pr=st.pr||{};st.pr[ev.id]=res}catch(e){err=e.message==='nokey'?'Add your Odds API key first.':e.message}if(st.sel!==ev.id)return}
+ let h=`<div class="row" role="group" aria-label="Prop markets" style="margin-bottom:8px">${M.map(([mk,n])=>`<button class="btn${sel.includes(mk)?' pri':''}" data-pm="${mk}" aria-pressed="${sel.includes(mk)}">${esc(n)}</button>`).join('')}</div>`;
+ h+=key?`<div class="scan"><button class="btn pri" id="prGo">${res?'Re-check':'Pull'} props for ${sel.length} market${sel.length===1?'':'s'}</button><span>About ${sel.length} credit${sel.length===1?'':'s'}${remTxt()}</span></div>`:'<p class="note">Add your Odds API key (Sportsbooks button) to pull prop lines.</p>';
+ if(err)h+=`<p class="note">${esc(err)}</p>`;
+ if(res){h+='<div class="skel" id="prWait">Loading each player\'s recent games…</div>'}box.innerHTML=h+'<div id="prOut"></div><div class="tk"></div>';
+ box.querySelectorAll('[data-pm]').forEach(b=>b.onclick=()=>{const mk=b.dataset.pm;sel=sel.includes(mk)?sel.filter(x=>x!==mk):sel.concat(mk);ls.set(selKey,sel);renderProps(ev,false)});
+ if($('#prGo'))$('#prGo').onclick=()=>renderProps(ev,true);
+ if(!res)return;
+ const N=nGames(lg);const [ra,rh]=await Promise.all([teamGames(lg,ev.away,N).catch(()=>[]),teamGames(lg,ev.home,N).catch(()=>[])]);if(st.sel!==ev.id)return;
+ const idx=playerIndex([[ra,ev.away],[rh,ev.home]]);st.prRows={};let out='';
+ for(const mk of res.sel){const d=propDef(lg.s,mk);if(!d)continue;const R=propRows(res,mk);st.prRows[mk]=R;
+  out+=`<h4 style="margin:16px 0 6px">${esc(d[1])}</h4>`;if(!R.length){out+='<p class="note">No lines posted for this market yet.</p>';continue}
+  out+=`<div class="scroll"><table class="stack bk"><thead><tr><th>Player</th><th class="r">Line</th><th class="r">Best over</th><th class="r">Best under</th><th class="r">Fair over</th><th class="r">EV</th><th class="r">L5</th><th class="r">L10</th><th class="r">Last ${N}</th><th class="r">Venue</th><th class="r">vs opp</th><th class="r">Avg</th><th>Recent</th></tr></thead><tbody>${R.map((r,i)=>{
+   const p=findPlayer(idx,r.name);const isHome=p&&p.team===ev.home;const oppId=p?(isHome?ev.away.id:ev.home.id):null;const f=d[2];const G=p?p.G:[];
+   const h5=hit(G.slice(0,5),f,r.line),h10=hit(G.slice(0,10),f,r.line),hA=hit(G,f,r.line),hV=hit(G,f,r.line,x=>x.home===isHome),hO=hit(G,f,r.line,x=>x.oppId===oppId);
+   const eo=r.fp!=null&&r.bo?r.fp*dec(r.bo.over)-1:null,eu=r.fp!=null&&r.bu?(1-r.fp)*dec(r.bu.under)-1:null;const be=eo!=null&&(eu==null||eo>=eu)?['o',eo]:eu!=null?['u',eu]:null;
+   return`<tr><td><b>${esc(r.name)}</b> <span class="note">${p?esc(p.team.abbr):'no ESPN match'}${r.alts?` · ${r.alts} alt line${r.alts>1?'s':''}`:''}</span></td><td class="r num">${r.line}</td>
+   <td class="r">${r.bo?`<button class="${be&&be[0]==='o'&&be[1]>0?'best':''}" data-pr="${mk}" data-i="${i}" data-sd="over">o${r.line} <small>${fA(r.bo.over)}</small></button><span class="note">${esc(r.bo.book)}</span>`:'—'}</td>
+   <td class="r">${r.bu?`<button class="${be&&be[0]==='u'&&be[1]>0?'best':''}" data-pr="${mk}" data-i="${i}" data-sd="under">u${r.line} <small>${fA(r.bu.under)}</small></button><span class="note">${esc(r.bu.book)}</span>`:'—'}</td>
+   <td class="r num">${r.fp==null?'—':pc(r.fp)+`<br><span class="note">${r.src==='Pinnacle'?'Pinnacle':'avg'}</span>`}</td><td class="r num ${be?be[1]>0?'W':'L':''}">${be?`${be[0]==='o'?'Over':'Under'} ${(be[1]>0?'+':'')+(be[1]*100).toFixed(1)}%`:'—'}</td>
+   <td class="r num">${hitTxt(h5)}</td><td class="r num">${hitTxt(h10)}</td><td class="r num">${hitTxt(hA)}</td><td class="r num">${hitTxt(hV)} <span class="note">${isHome?'home':'road'}</span></td><td class="r num">${hitTxt(hO)}</td><td class="r num">${hA.avg==null?'—':hA.avg.toFixed(1)}</td><td>${spark(hA.v,r.line)}</td></tr>`}).join('')}</tbody></table></div>`}
+ const w=$('#prWait');if(w)w.remove();
+ $('#prOut').innerHTML=out+`<p class="note">Hit rates count games he played in his team's last ${N} and show how often he went <b>over</b> today's line (green 60%+, red 40% or less). Small samples swing a lot, and minutes or role changes matter more than the raw rate. Fair over and EV use Pinnacle when it lists the prop, otherwise the average across books.</p>`;
+ box.onclick=e=>{const b=e.target.closest('button[data-pr]');if(!b)return;const mk=b.dataset.pr,r=st.prRows[mk][+b.dataset.i],sd=b.dataset.sd,d=propDef(lg.s,mk);const p=findPlayer(idx,r.name);
+  const fairS=r.fp==null?null:sd==='over'?r.fp:1-r.fp;const bk=sd==='over'?r.bo:r.bu;
+  openTicket(box,ev,{m:'prop',sd,line:r.line,odds:bk[sd],book:bk.book,fair:fairS,fairPt:r.line,lab:ln=>`${r.name} ${sd==='over'?'Over':'Under'} ${ln} ${d[1].toLowerCase()}`,prop:{pid:p?p.pid:null,name:r.name,mk,stat:d[1]}})}}
+
+/* ---------- settlement for period + prop bets ---------- */
+function setRes(b,r,fin){b.status=r;b.profit=r==='W'?+(b.stake?b.stake*(dec(b.odds)-1):0).toFixed(2):r==='P'?0:-(b.stake||0);if(fin)b.final=fin;return b}
+async function evalSpecial(b){const s=await J(API+b.p+'/summary?event='+b.ev,60000);const comp=g(s,'header','competitions',0);if(!comp||!g(comp,'status','type','completed'))return b;
+ const x=await gx({p:b.p,s:b.sport},b.ev);
+ if(b.per){const need=Math.max(...b.per.ps);if(x.h.ls.length<need||x.a.ls.length<need)return b;const hs=b.per.ps.reduce((t,p)=>t+(x.h.ls[p-1]||0),0),as=b.per.ps.reduce((t,p)=>t+(x.a.ls[p-1]||0),0);let r;
+  if(b.m==='ml'){const w=hs>as?'home':as>hs?'away':'draw';r=b.sd===w?'W':w==='draw'&&b.sd!=='draw'?'P':'L'}
+  else if(b.m==='spread'){const v=(b.sd==='home'?hs-as:as-hs)+b.line;r=v>0?'W':v<0?'L':'P'}
+  else{const t=hs+as;r=t===b.line?'P':(t>b.line)===(b.sd==='over')?'W':'L'}
+  return setRes(b,r,`${b.per.n}: ${b.away} ${as} – ${b.home} ${hs}`)}
+ if(b.m==='prop'){const d=propDef(b.sport,b.prop.mk);let pl=b.prop.pid?x.box[b.prop.pid]:null;if(!pl){const k=nzP(b.prop.name);pl=Object.values(x.box).find(p=>nzP(p.n)===k)}
+  const v=pl&&d?d[2](pl.v):null;if(v==null)return setRes(b,'P',`${b.prop.name} did not play (void)`);
+  return setRes(b,v===b.line?'P':(v>b.line)===(b.sd==='over')?'W':'L',`${b.prop.name}: ${v} ${b.prop.stat.toLowerCase()}`)}
+ return b}
+
 const GH='https://api.github.com',GF='line-desk-sync.json';
 async function gh(path,opt={}){const t=ls.get('ld:ghTok');const r=await fetch(GH+path,{...opt,headers:{Authorization:'Bearer '+t,Accept:'application/vnd.github+json',...(opt.body?{'Content-Type':'application/json'}:{})}});
  if(!r.ok){let m='HTTP '+r.status;try{m=(await r.json()).message||m}catch(_){}throw new Error(r.status===401?'GitHub rejected the token (expired or wrong).':r.status===404&&path.startsWith('/gists/')?'gist-missing':m)}return r.json()}
