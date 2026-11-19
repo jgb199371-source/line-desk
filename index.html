@@ -167,7 +167,7 @@ const TMOVE={Football:1.5,Basketball:2.5,Hockey:.5,Baseball:.5,Soccer:.5};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SYNCK={'ld:bets':1,'ld:slip':1,'ld:oak':1,'ld:del':1};
-const ls={quiet:false,get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));if(SYNCK[k]&&!ls.quiet){if(k==='ld:slip')localStorage.setItem('ld:slipT',Date.now());if(k==='ld:oak')localStorage.setItem('ld:oakT',Date.now());window.__ldSync&&window.__ldSync()}}catch(e){}}};
+const ls={quiet:false,get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));if((SYNCK[k]||/^ld:(oa|pe|pr):/.test(k))&&!ls.quiet){if(k==='ld:slip')localStorage.setItem('ld:slipT',Date.now());if(k==='ld:oak')localStorage.setItem('ld:oakT',Date.now());window.__ldSync&&window.__ldSync()}}catch(e){}}};
 let st={lg:LG.find(l=>l.k===ls.get('ld:lg'))||LG[0],date:'',events:[],sel:null,timer:null,sum:null,oa:{},seg:ls.get('ld:seg')||'league',bv:ls.get('ld:bv')||'single'};
 const memo=new Map();
 function J(u,ttl=30000){const m=memo.get(u);if(m&&Date.now()-m.t<ttl)return m.p;const p=fetch(u).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()});memo.set(u,{t:Date.now(),p});p.catch(()=>memo.delete(u));return p}
@@ -222,7 +222,7 @@ function renderBoard(){
  const q=$('#q').value.trim().toLowerCase();
  const evs=st.events.filter(e=>!q||[e.home.name,e.away.name,e.home.abbr,e.away.abbr].join(' ').toLowerCase().includes(q));
  if(!evs.length){$('#board').innerHTML=`<div class="empty">No ${esc(st.lg.n)} games ${st.date?'on this date':'on the current slate'}${q?' match that filter':''}. Try another day${st.lg.k==='mlb'||st.lg.k==='wnba'?' — the league may be in its offseason':''}.</div>`;return}
- const oad=st.oa[st.lg.oa]||(()=>{const x=ls.get('ld:oa:'+st.lg.oa);return x&&x.d&&Date.now()-x.t<6e5?(st.oa[st.lg.oa]=x):null})();const key=!!ls.get('ld:oak');
+ const oad=st.oa[st.lg.oa]||(()=>{const x=ls.get('ld:oa:'+st.lg.oa);return x&&x.d&&x.v===2&&Date.now()-x.t<36e5?(st.oa[st.lg.oa]=x):null})();const key=!!ls.get('ld:oak');
  const scan=key?`<div class="scan"><button class="btn" id="scanBtn">${oad?'Re-check':'Compare'} all books for ${esc(st.lg.n)}</button><span>${oad?'Prices from '+new Date(oad.t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})+'. ':''}About 3 credits per check${remTxt()}</span></div>`:'';
  $('#board').innerHTML=scan+evs.map(ev=>{const ed=oad?edges(ev,oad.d):null;const top=ed&&ed.filter(x=>x.ev!=null).sort((a,b)=>b.ev-a.ev)[0];const o=ev.odds||{};const nv=o.hm!=null&&o.am!=null?noVig(o.dr!=null?[o.am,o.hm,o.dr]:[o.am,o.hm]):null;const mv=moves(ev);
   const row=(t,line,ml,p)=>`<div class="tm"><img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><b>${esc(t.short||t.abbr)}<small>${esc(t.rec)}</small></b><span class="num sc">${ev.state==='pre'?'':esc(typeof t.score==='object'?g(t.score,'displayValue'):t.score??'')}</span><span class="num">${line}</span><span class="num">${ml}</span></div>`;
@@ -324,7 +324,7 @@ let remT=0;async function refreshRem(force){const k=ls.get('ld:oak');if(!k||(!fo
 const remTxt=()=>{const r=ls.get('ld:oarem');return r!=null?` · ${r} credits left this month`:''};
 function alertKey(e){const m=e.message==='nokey'?'Add your Odds API key first (Sportsbooks button).':'Odds API: '+e.message;const el=$('#bookMsg')||$('#kMsg');if(el)el.textContent=m;$('#stamp').textContent=m}
 async function oaLeague(lg,force){const key=ls.get('ld:oak');if(!key)throw new Error('nokey');const c=st.oa[lg.oa]||(()=>{const x=ls.get('ld:oa:'+lg.oa);return x&&x.d?x:null})();
- if(!force&&c&&c.v===2&&Date.now()-c.t<600000){st.oa[lg.oa]=c;return c}
+ if(!force&&c&&c.v===2&&Date.now()-c.t<36e5){st.oa[lg.oa]=c;return c}
  const q=`${OA}${lg.oa}/odds/?apiKey=${encodeURIComponent(key)}&markets=h2h,spreads,totals&oddsFormat=american&`;
  let r=await fetch(q+'bookmakers='+BOOKS.join(','));let wide=false;
  if(r.status===422||r.status===400){r=await fetch(q+'regions=us,eu');wide=true}
@@ -358,7 +358,7 @@ function edgesFrom(ev,rows,F){
 async function renderBooks(ev,force){const box=$('#books');if(!box)return;const lg=st.lg;
  if(!ls.get('ld:oak')){box.innerHTML='<p class="note">Add your free The Odds API key with the <b>Sportsbooks</b> button in the top bar to compare every book\'s price here.</p>';return}
  const have=st.oa[lg.oa]||ls.get('ld:oa:'+lg.oa);
- if(!force&&!(have&&have.d&&Date.now()-have.t<600000)){box.innerHTML=`<div class="scan"><button class="btn pri" id="bkGo">Compare sportsbooks</button><span>About 3 credits, then free for every ${esc(lg.n)} game for 10 minutes${remTxt()}</span></div><p class="note" id="bookMsg"></p>`;$('#bkGo').onclick=()=>renderBooks(ev,true);return}
+ if(!force&&!(have&&have.d&&have.v===2&&Date.now()-have.t<36e5)){box.innerHTML=`<div class="scan"><button class="btn pri" id="bkGo">Compare sportsbooks</button><span>About 3 credits, then free for every ${esc(lg.n)} game for 10 minutes${remTxt()}</span></div><p class="note" id="bookMsg"></p>`;$('#bkGo').onclick=()=>renderBooks(ev,true);return}
  box.innerHTML='<div class="skel">Checking sportsbooks…</div>';
  let x;try{x=await oaLeague(lg,force)}catch(e){box.innerHTML='<p class="note" id="bookMsg"></p>';alertKey(e);return}
  renderBoard();if(st.sel!==ev.id)return;const m=oaMatch(x.d,ev);
@@ -578,9 +578,9 @@ function perRows(ev,res,P){const mp={};mp['h2h_'+P.k]='h2h';mp['spreads_'+P.k]='
 function perHist(rows,P,isHome){const need=Math.max(...P.ps);const G=rows.filter(r=>r.x&&r.x.h.ls.length>=need&&r.x.a.ls.length>=need).map(r=>{const me=r.home?r.x.h:r.x.a,op=r.home?r.x.a:r.x.h;const f=P.ps.reduce((t,p)=>t+(me.ls[p-1]||0),0),a=P.ps.reduce((t,p)=>t+(op.ls[p-1]||0),0);return{f,a,home:r.home}});
  const n=G.length;if(!n)return null;const avg=k=>G.reduce((t,x)=>t+x[k],0)/n;return{n,G,f:avg('f'),a:avg('a'),w:G.filter(x=>x.f>x.a).length,l:G.filter(x=>x.f<x.a).length,t:G.filter(x=>x.f===x.a).length}}
 async function renderPeriods(ev,pull){const box=$('#periods');if(!box)return;const lg=st.lg,PS=perCfg(lg);if(!PS.length){box.innerHTML='<p class="note">No period markets for this league.</p>';return}
- const key=!!ls.get('ld:oak'),cost=PS.length*3,c=st.pe&&st.pe[ev.id];
- let res=c&&Date.now()-c.t<6e5?c:null,err='';
- if(pull&&key){box.innerHTML='<div class="skel">Pulling period lines…</div>';try{res=await oaEventOdds(lg,ev,PS.flatMap(P=>['h2h_'+P.k,'spreads_'+P.k,'totals_'+P.k]));st.pe=st.pe||{};st.pe[ev.id]=res}catch(e){err=e.message==='nokey'?'Add your Odds API key first.':e.message}if(st.sel!==ev.id)return}
+ const key=!!ls.get('ld:oak'),cost=PS.length*3,c=(st.pe&&st.pe[ev.id])||ls.get('ld:pe:'+ev.id);
+ let res=c&&c.x&&Date.now()-c.t<36e5?c:null,err='';
+ if(pull&&key){box.innerHTML='<div class="skel">Pulling period lines…</div>';try{res=await oaEventOdds(lg,ev,PS.flatMap(P=>['h2h_'+P.k,'spreads_'+P.k,'totals_'+P.k]));st.pe=st.pe||{};st.pe[ev.id]=res;ls.set('ld:pe:'+ev.id,res)}catch(e){err=e.message==='nokey'?'Add your Odds API key first.':e.message}if(st.sel!==ev.id)return}
  const N=nGames(lg);const [ra,rh]=await Promise.all([teamGames(lg,ev.away,N).catch(()=>[]),teamGames(lg,ev.home,N).catch(()=>[])]);if(st.sel!==ev.id)return;
  let h=key?(res?`<p class="note">Lines pulled ${new Date(res.t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}${remTxt()}. Click a price to bet it. <button class="del" id="peRe">Re-check (~${cost} credits)</button></p>`:`<div class="scan"><button class="btn pri" id="peGo">Pull ${esc(PS.map(P=>P.n).join(' + '))} lines</button><span>About ${cost} credits for this game${remTxt()}</span></div>`):'<p class="note">Add your Odds API key (Sportsbooks button) to see period lines. Scoring history below is free.</p>';
  if(err)h+=`<p class="note">${esc(err)}</p>`;
@@ -622,8 +622,8 @@ function spark(vals,line){const v=vals.slice(0,10).reverse();if(!v.length)return
 async function renderProps(ev,pull){const box=$('#props');if(!box)return;const lg=st.lg,M=PROPM[lg.s];
  if(!M){box.innerHTML='<p class="note">ESPN doesn\'t publish player box scores for soccer, so hit rates aren\'t available here yet.</p>';return}
  const key=!!ls.get('ld:oak');const selKey='ld:pm:'+lg.s;let sel=ls.get(selKey);if(!Array.isArray(sel)||!sel.length)sel=M.filter(x=>x[3]).map(x=>x[0]);
- const c=st.pr&&st.pr[ev.id];let res=c&&Date.now()-c.t<6e5?c:null,err='';
- if(pull&&key&&sel.length){box.innerHTML='<div class="skel">Pulling player props…</div>';try{res=await oaEventOdds(lg,ev,sel);res.sel=sel.slice();st.pr=st.pr||{};st.pr[ev.id]=res}catch(e){err=e.message==='nokey'?'Add your Odds API key first.':e.message}if(st.sel!==ev.id)return}
+ const c=(st.pr&&st.pr[ev.id])||ls.get('ld:pr:'+ev.id);let res=c&&c.x&&Date.now()-c.t<36e5?c:null,err='';
+ if(pull&&key&&sel.length){box.innerHTML='<div class="skel">Pulling player props…</div>';try{res=await oaEventOdds(lg,ev,sel);res.sel=sel.slice();st.pr=st.pr||{};st.pr[ev.id]=res;ls.set('ld:pr:'+ev.id,res)}catch(e){err=e.message==='nokey'?'Add your Odds API key first.':e.message}if(st.sel!==ev.id)return}
  let h=`<div class="row" role="group" aria-label="Prop markets" style="margin-bottom:8px">${M.map(([mk,n])=>`<button class="btn${sel.includes(mk)?' pri':''}" data-pm="${mk}" aria-pressed="${sel.includes(mk)}">${esc(n)}</button>`).join('')}</div>`;
  h+=key?`<div class="scan"><button class="btn pri" id="prGo">${res?'Re-check':'Pull'} props for ${sel.length} market${sel.length===1?'':'s'}</button><span>About ${sel.length} credit${sel.length===1?'':'s'}${remTxt()}</span></div>`:'<p class="note">Add your Odds API key (Sportsbooks button) to pull prop lines.</p>';
  if(err)h+=`<p class="note">${esc(err)}</p>`;
@@ -664,7 +664,8 @@ async function evalSpecial(b){const s=await J(API+b.p+'/summary?event='+b.ev,600
   return setRes(b,v===b.line?'P':(v>b.line)===(b.sd==='over')?'W':'L',`${b.prop.name}: ${v} ${b.prop.stat.toLowerCase()}`)}
  return b}
 
-const GH='https://api.github.com',GF='line-desk-sync.json';
+const GH='https://api.github.com',GF='line-desk-sync.json',GO='line-desk-odds.json',ODDS_TTL=36e5;
+function localOdds(){const E={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^ld:(oa|pe|pr):/.test(k)){const v=ls.get(k);if(v&&v.t&&Date.now()-v.t<ODDS_TTL)E[k]=v}}}catch(_){}return E}
 async function gh(path,opt={}){const t=ls.get('ld:ghTok');const r=await fetch(GH+path,{...opt,headers:{Authorization:'Bearer '+t,Accept:'application/vnd.github+json',...(opt.body?{'Content-Type':'application/json'}:{})}});
  if(!r.ok){let m='HTTP '+r.status;try{m=(await r.json()).message||m}catch(_){}throw new Error(r.status===401?'GitHub rejected the token (expired or wrong).':r.status===404&&path.startsWith('/gists/')?'gist-missing':m)}return r.json()}
 const localPayload=()=>({v:1,t:Date.now(),bets:getB(),del:ls.get('ld:del')||[],slip:getSlip(),slipT:+localStorage.getItem('ld:slipT')||0,oak:ls.get('ld:oak')||'',oakT:+localStorage.getItem('ld:oakT')||0});
@@ -683,17 +684,21 @@ async function syncNow(){if(!ls.get('ld:ghTok'))return;if(syBusy){syAgain=true;r
  try{let id=await findGist(),g;try{g=await gh('/gists/'+id)}catch(e){if(e.message!=='gist-missing')throw e;ls.set('ld:gist',null);id=await findGist();g=await gh('/gists/'+id)}
   const f=g.files&&g.files[GF];let remote={};if(f){const txt=f.truncated?await (await fetch(f.raw_url)).text():f.content;try{remote=JSON.parse(txt)}catch(_){}}
   const M=mergeP(localPayload(),remote);
-  ls.quiet=true;ls.set('ld:bets',M.bets);ls.set('ld:del',M.del);ls.set('ld:slip',M.slip);localStorage.setItem('ld:slipT',M.slipT);ls.set('ld:oak',M.oak);localStorage.setItem('ld:oakT',M.oakT);ls.quiet=false;
-  const strip=x=>JSON.stringify({...x,t:0});if(strip(M)!==strip({v:1,t:0,bets:remote.bets||[],del:remote.del||[],slip:remote.slip||[],slipT:remote.slipT||0,oak:remote.oak||'',oakT:remote.oakT||0}))await gh('/gists/'+id,{method:'PATCH',body:JSON.stringify({files:{[GF]:{content:JSON.stringify(M)}}})});
+  const fo=g.files&&g.files[GO];let rOdds={};if(fo){try{rOdds=JSON.parse(fo.truncated?await (await fetch(fo.raw_url)).text():fo.content).e||{}}catch(_){}}
+  const lOdds=localOdds(),MO={};let gotNew=false;for(const k of new Set([...Object.keys(lOdds),...Object.keys(rOdds)])){const a=lOdds[k],b=rOdds[k];const w=!a?b:!b?a:(b.t>a.t?b:a);if(w&&Date.now()-w.t<ODDS_TTL){MO[k]=w;if(w!==a)gotNew=true}}
+  ls.quiet=true;if(gotNew){for(const [k,v] of Object.entries(MO))if(!lOdds[k]||lOdds[k].t<v.t)ls.set(k,v);st.oa={};st.pe={};st.pr={}}ls.set('ld:bets',M.bets);ls.set('ld:del',M.del);ls.set('ld:slip',M.slip);localStorage.setItem('ld:slipT',M.slipT);ls.set('ld:oak',M.oak);localStorage.setItem('ld:oakT',M.oakT);ls.quiet=false;
+  const strip=x=>JSON.stringify({...x,t:0});const files={};if(strip(M)!==strip({v:1,t:0,bets:remote.bets||[],del:remote.del||[],slip:remote.slip||[],slipT:remote.slipT||0,oak:remote.oak||'',oakT:remote.oakT||0}))files[GF]={content:JSON.stringify(M)};
+  const sig=o=>Object.keys(o).sort().map(k=>k+':'+o[k].t).join('|');if(sig(MO)!==sig(rOdds))files[GO]={content:JSON.stringify({t:Date.now(),e:MO})};
+  if(Object.keys(files).length)await gh('/gists/'+id,{method:'PATCH',body:JSON.stringify({files})});
   ls.set('ld:syncT',Date.now());syStatus(`Synced ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})} · ${M.bets.length} bet${M.bets.length===1?'':'s'} on all devices.`);
-  renderSlip();if(!$('#betsView').hidden)renderBets();if(st.events.length)renderBoard();
+  renderSlip();if(!$('#betsView').hidden)renderBets();if(st.events.length)renderBoard();if(gotNew){const ev=st.events.find(e=>e.id===st.sel);if(ev){renderBooks(ev,false);renderPeriods(ev,false);renderProps(ev,false)}}
  }catch(e){ls.quiet=false;syStatus('Sync failed: '+e.message)}finally{syBusy=false;if(syAgain){syAgain=false;window.__ldSync()}}}
 $('#syBtn').onclick=()=>{const p=$('#syp');p.hidden=!p.hidden;if(!p.hidden){$('#syIn').value='';$('#syIn').placeholder=ls.get('ld:ghTok')?'Connected. Paste a new token to replace it':'Paste a token with only the gist scope';if(!ls.get('ld:ghTok'))syStatus('Not connected. Bets stay on this device only.')}};
 $('#sySave').onclick=async()=>{const t=$('#syIn').value.trim();if(!/^(ghp_|github_pat_)[A-Za-z0-9_]{20,}$/.test(t)){syStatus("That doesn't look like a GitHub token (starts with ghp_ or github_pat_).");return}
  const old=ls.get('ld:ghTok');ls.set('ld:ghTok',t);try{const u=await gh('/user');$('#syIn').value='';syStatus('Connected as '+u.login+'. Syncing…');await syncNow()}catch(e){ls.set('ld:ghTok',old);syStatus('Token rejected: '+e.message)}};
 $('#syNow').onclick=syncNow;
 $('#syDel').onclick=()=>{ls.set('ld:ghTok',null);ls.set('ld:gist',null);syStatus('Disconnected. Your bets stay on this device and in your GitHub gist.')};
-addEventListener('focus',()=>{window.__ldSync();refreshRem()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){window.__ldSync();refreshRem()}});
+addEventListener('focus',()=>{window.__ldSync();refreshRem()});setInterval(()=>{if(!document.hidden)window.__ldSync()},120000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){window.__ldSync();refreshRem()}});
 function setDate(d){st.date=d?ymd(d):'';$('#date').value=d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'';st.sel=null;loadBoard()}
 const curDate=()=>{const v=$('#date').value;return v?new Date(v+'T12:00'):new Date()};
 const defDate=()=>st.lg.s==='Football'?null:new Date();
