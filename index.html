@@ -65,6 +65,9 @@ main{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:18px;p
 .slip input{font:16px Inter,sans-serif;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);min-height:38px;width:100%}
 .slip .kv{display:flex;justify-content:space-between;gap:8px;font-size:14px;padding:3px 0}.slip .kv b{font-family:"Barlow Condensed",sans-serif;font-size:18px}
 .lg{font-size:13px;line-height:1.5}.dot{font-weight:700}.dot.pending{color:var(--mute)}
+.jump{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}.jump .btn{min-height:36px;padding:6px 10px;font-size:13px}
+.sheet h3{scroll-margin-top:80px}
+@media(max-width:600px){.bar{position:static}.sheet h3{scroll-margin-top:12px}}
 .badge{font-size:12px;font-weight:600;border-radius:999px;padding:2px 8px;background:var(--chip);color:var(--ink)}
 .badge.hot{background:var(--acc);color:#fff}
 .sheet{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2.4vw,26px);align-self:start}
@@ -120,7 +123,7 @@ td.r,th.r{text-align:right}
   <button class="btn pri" id="vBets">My bets</button>
   <span class="stamp" id="stamp"></span>
 </div>
-<div class="keyp" id="keyp" hidden><label>The Odds API key <input id="kIn" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the key from your email"></label><button class="btn pri" id="kSave">Save key</button><button class="btn" id="kDel">Remove</button><span class="note" id="kMsg"></span></div>
+<div class="keyp" id="keyp" hidden><label>The Odds API key <input id="kIn" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the key from your email"></label><button class="btn pri" id="kSave">Save key</button><button class="btn" id="kShow">Show saved key</button><button class="btn" id="kDel">Remove</button><span class="note" id="kMsg"></span></div>
 <div class="keyp" id="syp" hidden><label>GitHub token <input id="syIn" type="password" autocomplete="off" spellcheck="false" placeholder="Paste a token with only the gist scope"></label><button class="btn pri" id="sySave">Connect</button><button class="btn" id="syNow">Sync now</button><button class="btn" id="syDel">Disconnect</button><a class="btn" href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Line%20Desk%20sync" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;text-decoration:none">Create a token</a><span class="note" id="syMsg"></span></div>
 <main>
   <section id="board" aria-label="Games"><div class="skel">Loading games…</div></section>
@@ -291,20 +294,22 @@ async function openGame(id){
  st.sel=id;renderBoard();const ev=st.events.find(e=>e.id===id);if(!ev)return;const lg=st.lg;
  const sh=$('#sheet');const venue=ev.venue?' · '+esc(ev.venue):'';
  sh.innerHTML=`<h2>${esc(ev.away.name)} @ ${esc(ev.home.name)}</h2><p class="sub">${when(ev)}${venue}${ev.neutral?' · neutral site':''}</p>
- <div id="mk">${marketHTML(ev)}</div><h3>Compare sportsbooks</h3><div id="books"></div><div id="model"></div>
- <h3>Value calculator</h3><div class="calc"><label>Bet<select id="calcSide"></select></label><label>Your win probability %<input id="calcP" type="number" min="1" max="99" step="0.5" inputmode="decimal"></label><label>Bankroll $<input id="calcB" type="number" min="0" step="10" value="${esc(ls.get('ld:bank')??500)}"></label><label>Kelly fraction<select id="calcK"><option value="0.25">¼ Kelly</option><option value="0.5">½ Kelly</option><option value="1">Full Kelly</option></select></label></div><div class="out" id="calcOut"></div>
+ <nav class="jump" aria-label="Jump to section">${[['jBooks','Sportsbooks'],['jCalc','Calculator'],['jPer','Halves & quarters'],['jProps','Player props'],['jTr','Trends'],['jInj','Injuries']].map(([i,n])=>`<button class="btn" data-jump="${i}">${n}</button>`).join('')}</nav>
+ <div id="mk">${marketHTML(ev)}</div><h3 id="jBooks">Compare sportsbooks</h3><div id="books"></div><div id="model"></div>
+ <h3 id="jCalc">Value calculator</h3><div class="calc"><label>Bet<select id="calcSide"></select></label><label>Your win probability %<input id="calcP" type="number" min="1" max="99" step="0.5" inputmode="decimal"></label><label>Bankroll $<input id="calcB" type="number" min="0" step="10" value="${esc(ls.get('ld:bank')??500)}"></label><label>Kelly fraction<select id="calcK"><option value="0.25">¼ Kelly</option><option value="0.5">½ Kelly</option><option value="1">Full Kelly</option></select></label></div><div class="out" id="calcOut"></div>
  <div class="calc" style="margin-top:12px"><label>Odds you got<input id="betOdds" inputmode="numeric"></label><label>Line you got<input id="betLine" inputmode="decimal"></label><label>Stake $<input id="betStake" type="number" min="0" step="1"></label><input type="hidden" id="betBook"><button class="btn pri" id="logBet">Log this bet</button><button class="btn" id="addLeg">Add to parlay</button></div><p class="note" id="logMsg"></p><p class="note">Starts at the market's fair probability, so the edge reads near zero until you put in your own number.</p>
- <h3>Halves, quarters and periods</h3><div id="periods"><div class="skel">Loading period scoring…</div></div>
- <h3>Player props</h3><div id="props"></div>
- <h3>Betting trends <span class="note" id="trN"></span></h3><div class="two" id="tr"><div class="skel">Working out ${esc(ev.away.abbr)}'s record against the spread…</div><div class="skel">Working out ${esc(ev.home.abbr)}'s record against the spread…</div></div>
+ <h3 id="jPer">Halves, quarters and periods</h3><div id="periods"><div class="skel">Loading period scoring…</div></div>
+ <h3 id="jProps">Player props</h3><div id="props"></div>
+ <h3 id="jTr">Betting trends <span class="note" id="trN"></span></h3><div class="two" id="tr"><div class="skel">Working out ${esc(ev.away.abbr)}'s record against the spread…</div><div class="skel">Working out ${esc(ev.home.abbr)}'s record against the spread…</div></div>
  <p class="note">Calculated from each team's recent completed games and the closing lines ESPN kept for them (${esc(LINE[lg.s])} at the closing number). Outlined tiles match this game's situation.</p>
- <h3>Injuries</h3><div id="inj"><div class="skel">Loading…</div></div><div id="h2h"></div>`;
+ <h3 id="jInj">Injuries</h3><div id="inj"><div class="skel">Loading…</div></div><div id="h2h"></div>`;
  const S=sides(ev);renderMarket(ev);renderBooks(ev,false);const pf=()=>{const s=S[+$('#calcSide').value];$('#calcP').value=s&&s.fair?(s.fair*100).toFixed(1):'';if(s){$('#betOdds').value=fA(s.a);$('#betLine').value=s.ln==null?'':s.m==='total'?s.ln:fL(s.ln);$('#betLine').disabled=s.m==='ml';$('#betBook').value=(ev.odds&&ev.odds.prov)||''}};st.pf=pf;st.S=S;$('#betStake').value=ls.get('ld:stake')??10;pf();calc();
  $('#calcSide').onchange=()=>{pf();calc()};$('#calcP').oninput=calc;$('#calcB').oninput=calc;$('#calcK').onchange=calc;$('#betOdds').oninput=calc;$('#logBet').onclick=()=>logBet(ev,S);$('#addLeg').onclick=()=>addLeg(ev,S);
  if(innerWidth<900)sh.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});
  J(API+lg.p+'/summary?event='+id,30000).then(s=>{if(st.sel!==id)return;$('#model').innerHTML=modelHTML(ev,s);$('#inj').innerHTML=injHTML(s);
   const ss=(s.seasonseries||[])[0];if(ss&&ss.summary)$('#h2h').innerHTML=`<h3>Head to head</h3><p>${esc(ss.summary)}</p>`;
   const pk=(s.pickcenter||[])[0];if(pk&&!ev.odds){ev.odds=parseOdds(pk,ev.home,ev.away);renderMarket(ev)}}).catch(()=>{$('#inj').innerHTML='<p class="note">Game details unavailable right now.</p>'});
+ sh.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{const t=document.getElementById(b.dataset.jump);if(t)t.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth',block:'start'})});
  renderPeriods(ev,false);renderProps(ev,false);
  const N=nGames(lg);$('#trN').textContent='· last '+N+' games each';
  const fav=ev.odds&&ev.odds.hl!=null&&ev.odds.hl!==0?ev.odds.hl<0:(ev.odds&&ev.odds.hm!=null&&ev.odds.am!=null?ev.odds.hm<ev.odds.am:null);
@@ -375,6 +380,7 @@ $('#kBtn').onclick=()=>{const p=$('#keyp');p.hidden=!p.hidden;if(!p.hidden){$('#
 $('#kSave').onclick=async()=>{const k=$('#kIn').value.trim();if(!/^[A-Za-z0-9]{20,64}$/.test(k)){$('#kMsg').textContent="That doesn't look like an Odds API key.";return}
  $('#kMsg').textContent='Checking key…';try{const r=await fetch(OA+'?apiKey='+encodeURIComponent(k));const rem=r.headers.get('x-requests-remaining');if(!r.ok){let m='HTTP '+r.status;try{m=(await r.json()).message||m}catch(_){}throw new Error(m)}
   ls.set('ld:oak',k);if(rem!=null)ls.set('ld:oarem',Math.floor(+rem));$('#kIn').value='';$('#kMsg').textContent='Key works and is saved in this browser'+remTxt()+'. Checking keys costs no credits.';renderBoard();const ev=st.events.find(e=>e.id===st.sel);if(ev)renderBooks(ev,false)}catch(e){$('#kMsg').textContent='Key rejected: '+e.message}};
+$('#kShow').onclick=()=>{const k=ls.get('ld:oak');if(!k){$('#kMsg').textContent='No key saved on this device yet. Find it in the email from The Odds API, or connect Sync on a device that has it.';return}const i=$('#kIn');if(i.type==='password'&&i.value===k){i.type='text';$('#kShow').textContent='Hide key';return}if(i.type==='text'){i.type='password';i.value='';$('#kShow').textContent='Show saved key';return}i.value=k;i.type='text';$('#kShow').textContent='Hide key';$('#kMsg').textContent='This is the key saved on this device. Select it and copy.'};
 $('#kDel').onclick=()=>{ls.set('ld:oak','');$('#kMsg').textContent='Key removed.';renderBoard();const ev=st.events.find(e=>e.id===st.sel);if(ev)renderBooks(ev,false)};
 const money=x=>(x<0?'−':'+')+'$'+Math.abs(x).toFixed(2);
 const getB=()=>{const B=ls.get('ld:bets');return Array.isArray(B)?B:[]};
