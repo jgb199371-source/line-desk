@@ -130,8 +130,9 @@ td.r,th.r{text-align:right}
   <section class="sheet" id="sheet" aria-live="polite"><h2>Pick a game</h2><p class="sub">Choose a game on the board to see the market, ESPN's model, against-the-spread and over/under trends, injuries and a value calculator.</p></section>
 </main>
 <section id="betsView" hidden aria-label="My bets">
-  <div class="bh"><h2>My bets</h2><div class="row" id="bView" role="group" aria-label="Bet type"></div><div class="row"><button class="btn" id="bSettle">Update results</button><button class="btn" id="bExport">Export backup</button><label class="btn" for="bImport" style="display:inline-flex;align-items:center">Import backup</label><input type="file" id="bImport" accept=".json,application/json" hidden></div></div>
+  <div class="bh"><h2>My bets</h2><div class="row" id="bView" role="group" aria-label="Bet type"></div><div class="row"><button class="btn pri" id="bAdd">Add other bet</button><button class="btn" id="bSettle">Update results</button><button class="btn" id="bExport">Export backup</button><label class="btn" for="bImport" style="display:inline-flex;align-items:center">Import backup</label><input type="file" id="bImport" accept=".json,application/json" hidden></div></div>
   <p class="note" id="bMsg"></p>
+  <div class="card" id="bAddF" hidden><div class="calc"><label>Describe the bet<input id="aDesc" placeholder="e.g. Chiefs to win Super Bowl"></label><label>League or sport<input id="aLg" placeholder="NFL futures"></label><label>Settles around<input id="aDate" type="date"></label><label>Odds<input id="aOdds" inputmode="numeric" placeholder="+450"></label><label>Stake $<input id="aStake" type="number" min="0"></label><label>Book<input id="aBook"></label></div><div class="row" style="margin-top:8px"><button class="btn pri" id="aSave">Save bet</button><button class="btn" id="aCancel">Cancel</button><span class="note" id="aMsg">For futures, specials and anything not tied to a game on the board. You mark it won or lost yourself.</span></div></div>
   <div class="tiles" id="bStats"></div>
   <div class="fig" id="bChart" hidden><svg role="img" aria-label="Cumulative profit over time"></svg></div>
   <div id="bSport"></div>
@@ -294,12 +295,13 @@ async function openGame(id){
  st.sel=id;renderBoard();const ev=st.events.find(e=>e.id===id);if(!ev)return;const lg=st.lg;
  const sh=$('#sheet');const venue=ev.venue?' · '+esc(ev.venue):'';
  sh.innerHTML=`<h2>${esc(ev.away.name)} @ ${esc(ev.home.name)}</h2><p class="sub">${when(ev)}${venue}${ev.neutral?' · neutral site':''}</p>
- <nav class="jump" aria-label="Jump to section">${[['jBooks','Sportsbooks'],['jCalc','Calculator'],['jPer','Halves & quarters'],['jProps','Player props'],['jTr','Trends'],['jInj','Injuries']].map(([i,n])=>`<button class="btn" data-jump="${i}">${n}</button>`).join('')}</nav>
+ <nav class="jump" aria-label="Jump to section">${[['jBooks','Sportsbooks'],['jCalc','Calculator'],['jPer','Halves & quarters'],['jProps','Player props'],['jLog','Log any bet'],['jTr','Trends'],['jInj','Injuries']].map(([i,n])=>`<button class="btn" data-jump="${i}">${n}</button>`).join('')}</nav>
  <div id="mk">${marketHTML(ev)}</div><h3 id="jBooks">Compare sportsbooks</h3><div id="books"></div><div id="model"></div>
  <h3 id="jCalc">Value calculator</h3><div class="calc"><label>Bet<select id="calcSide"></select></label><label>Your win probability %<input id="calcP" type="number" min="1" max="99" step="0.5" inputmode="decimal"></label><label>Bankroll $<input id="calcB" type="number" min="0" step="10" value="${esc(ls.get('ld:bank')??500)}"></label><label>Kelly fraction<select id="calcK"><option value="0.25">¼ Kelly</option><option value="0.5">½ Kelly</option><option value="1">Full Kelly</option></select></label></div><div class="out" id="calcOut"></div>
  <div class="calc" style="margin-top:12px"><label>Odds you got<input id="betOdds" inputmode="numeric"></label><label>Line you got<input id="betLine" inputmode="decimal"></label><label>Stake $<input id="betStake" type="number" min="0" step="1"></label><input type="hidden" id="betBook"><button class="btn pri" id="logBet">Log this bet</button><button class="btn" id="addLeg">Add to parlay</button></div><p class="note" id="logMsg"></p><p class="note">Starts at the market's fair probability, so the edge reads near zero until you put in your own number.</p>
  <h3 id="jPer">Halves, quarters and periods</h3><div id="periods"><div class="skel">Loading period scoring…</div></div>
  <h3 id="jProps">Player props</h3><div id="props"></div>
+ <h3 id="jLog">Log any bet</h3><div id="manual"></div>
  <h3 id="jTr">Betting trends <span class="note" id="trN"></span></h3><div class="two" id="tr"><div class="skel">Working out ${esc(ev.away.abbr)}'s record against the spread…</div><div class="skel">Working out ${esc(ev.home.abbr)}'s record against the spread…</div></div>
  <p class="note">Calculated from each team's recent completed games and the closing lines ESPN kept for them (${esc(LINE[lg.s])} at the closing number). Outlined tiles match this game's situation.</p>
  <h3 id="jInj">Injuries</h3><div id="inj"><div class="skel">Loading…</div></div><div id="h2h"></div>`;
@@ -310,7 +312,7 @@ async function openGame(id){
   const ss=(s.seasonseries||[])[0];if(ss&&ss.summary)$('#h2h').innerHTML=`<h3>Head to head</h3><p>${esc(ss.summary)}</p>`;
   const pk=(s.pickcenter||[])[0];if(pk&&!ev.odds){ev.odds=parseOdds(pk,ev.home,ev.away);renderMarket(ev)}}).catch(()=>{$('#inj').innerHTML='<p class="note">Game details unavailable right now.</p>'});
  sh.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{const t=document.getElementById(b.dataset.jump);if(t)t.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth',block:'start'})});
- renderPeriods(ev,false);renderProps(ev,false);
+ renderPeriods(ev,false);renderProps(ev,false);renderManual(ev);
  const N=nGames(lg);$('#trN').textContent='· last '+N+' games each';
  const fav=ev.odds&&ev.odds.hl!=null&&ev.odds.hl!==0?ev.odds.hl<0:(ev.odds&&ev.odds.hm!=null&&ev.odds.am!=null?ev.odds.hm<ev.odds.am:null);
  const [ta,th]=await Promise.all([trends(lg,ev.away,N).catch(()=>[]),trends(lg,ev.home,N).catch(()=>[])]);
@@ -423,7 +425,7 @@ function renderSlip(){const el=$('#slip'),L=getSlip();document.body.style.paddin
   if(o==null||Math.abs(o)<100){$('#slMsg').textContent='Odds look wrong.';return}if(!(k>0)){$('#slMsg').textContent='Enter a stake.';return}
   const ds=L2.map(l=>new Date(l.date).getTime());const p={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),type:'parlay',ts:Date.now(),date:new Date(Math.min(...ds)).toISOString(),lastDate:new Date(Math.max(...ds)).toISOString(),lgn:'Parlay',sport:'Parlay',label:`${L2.length}-leg parlay`,legs:L2.map(l=>({...l,status:'pending'})),odds:Math.round(o),calcOdds:A,stake:k,book:$('#slB').value.trim(),fairAtBet:pf,status:'pending'};
   const B=getB();B.push(p);ls.set('ld:bets',B);ls.set('ld:stake',k);ls.set('ld:slip',[]);renderSlip();const m=$('#logMsg');if(m)m.innerHTML=`Logged your <b>${L2.length}-leg parlay ${fA(p.odds)}</b> for $${k.toFixed(2)}. Find it under My bets → Parlays.`;if(!$('#betsView').hidden)renderBets()}}
-async function evalBet(b){if(b.per||b.m==='prop')return evalSpecial(b);const s=await J(API+b.p+'/summary?event='+b.ev,60000);const comp=g(s,'header','competitions',0);if(!comp)return b;
+async function evalBet(b){if(b.m==='other'||!b.ev)return b;if(b.per||b.m==='prop'||b.m==='tt')return evalSpecial(b);const s=await J(API+b.p+'/summary?event='+b.ev,60000);const comp=g(s,'header','competitions',0);if(!comp)return b;
  const cs=comp.competitors||[],hc=cs.find(x=>x.homeAway==='home'),ac=cs.find(x=>x.homeAway==='away');if(!hc||!ac)return b;
  const h=team(hc),a=team(ac),done=!!g(comp,'status','type','completed');
  const o=parseOdds((s.pickcenter||[]).find(p=>p.pointSpread||p.moneyline||p.spread!=null)||(s.pickcenter||[])[0],h,a);
@@ -455,13 +457,15 @@ function parlayRow(b){const n=b.legs.length,won=b.legs.filter(l=>l.status==='W')
  return`<tr><td>${new Date(b.date).toLocaleDateString([], {month:'numeric',day:'numeric'})} <b>${n}-leg parlay</b><div class="lg">${b.legs.map(l=>`<div><span class="dot ${l.status}">${ic[l.status]||'○'}</span> ${esc(l.label)} <span class="num">${fA(l.odds)}</span> <span class="note">${esc(l.away)} @ ${esc(l.home)}${l.final?' · '+esc(l.final):''}</span></div>`).join('')}</div></td>
  <td><b>${esc(b.label)}</b>${b.book?`<br><span class="note">${esc(b.book)}</span>`:''}</td><td class="r num">${fA(b.odds)}${b.paidOdds&&b.paidOdds!==b.odds?`<br><span class="note">paid ${fA(b.paidOdds)}</span>`:''}</td><td class="r num">$${b.stake.toFixed(2)}</td>
  <td class="r num">${b.closeFair?'fair '+fA(fair(b.closeFair)):'—'}</td><td class="num">${clvTxt(b)}</td>
- <td class="${b.status==='pending'?'':b.status}">${b.status==='pending'?`Open · ${won}/${n} hit${done<n?'':''}`:b.status==='W'?'Win':b.status==='L'?'Loss':'Push'}</td><td class="r num ${b.profit>0?'W':b.profit<0?'L':''}">${b.status==='pending'?'—':money(b.profit)}</td><td><button class="del" data-del="${b.id}" aria-label="Delete parlay">Delete</button></td></tr>`}
+ <td class="${b.status==='pending'?'':b.status}">${b.status==='pending'?`Open · ${won}/${n} hit${canMS(b)?msBtns(b):''}`:b.status==='W'?'Win':b.status==='L'?'Loss':'Push'}${b.manual?' <span class="note">(you)</span>':''}</td><td class="r num ${b.profit>0?'W':b.profit<0?'L':''}">${b.status==='pending'?'—':money(b.profit)}</td><td><button class="del" data-del="${b.id}" aria-label="Delete parlay">Delete</button></td></tr>`}
+const canMS=b=>b.status==='pending'&&(b.m==='other'||Date.now()-new Date(b.lastDate||b.date)>8*36e5);
+const msBtns=b=>`<br><span class="note">Mark:</span> <button class="del" data-ms="${b.id}|W">Won</button><button class="del" data-ms="${b.id}|L">Lost</button><button class="del" data-ms="${b.id}|P">Push</button>`;
 function clvTxt(b){const p=[];if(b.clvPct!=null)p.push(`<span class="${b.clvPct>0?'W':b.clvPct<0?'L':''}">${b.clvPct>0?'+':''}${(b.clvPct*100).toFixed(1)}%</span>`);if(b.clvPts)p.push(`<span class="${b.clvPts>0?'W':'L'}">${b.clvPts>0?'+':''}${b.clvPts} pts</span>`);return p.length?p.join(' · ')+(b.close&&!b.close.final?' <span class="note">now</span>':''):'—'}
 function summ(L){const S=L.filter(b=>b.status!=='pending'),w=S.filter(b=>b.status==='W').length,l=S.filter(b=>b.status==='L').length,pu=S.filter(b=>b.status==='P').length;
  const prof=S.reduce((x,b)=>x+(b.profit||0),0),stk=S.reduce((x,b)=>x+b.stake,0),cv=S.filter(b=>b.clvPct!=null),bt=S.filter(b=>b.clvPct!=null||b.clvPts!=null);
  return{n:S.length,rec:`${w}-${l}${pu?'-'+pu:''}`,prof,roi:stk?prof/stk:null,clv:cv.length?cv.reduce((x,b)=>x+b.clvPct,0)/cv.length:null,exp:cv.length?cv.reduce((x,b)=>x+b.stake*b.clvPct,0):null,beat:bt.filter(b=>(b.clvPct!=null?b.clvPct:b.clvPts)>0).length,bn:bt.length}}
 const SEGP={legs:['Legs',b=>String(b.legs.length).padStart(2,'0')+' · '+b.legs.length+' legs'],mix:['Leagues',b=>[...new Set(b.legs.map(l=>l.lgn))].sort().join(' + ')],sg:['Same game?',b=>b.legs.length!==new Set(b.legs.map(l=>l.ev)).size?'Has same-game legs':'All different games'],book:['Sportsbook',b=>b.book||'Not recorded']};
-const SEG={league:['League',b=>b.lgn],type:['Bet type',b=>b.m==='prop'?'Player prop':b.per?b.per.n+' line':({ml:'Moneyline',spread:'Spread / puck / run line',total:'Total'})[b.m]],side:['Fav / dog',b=>b.m==='total'?(b.sd==='over'?'Over':'Under'):b.sd==='draw'?'Draw':b.m==='spread'&&b.line===0?'Pick em':(b.m==='ml'?b.odds<0:b.line<0)?'Favorite':'Underdog'],timing:['When you bet',b=>{const h=(new Date(b.date)-b.ts)/36e5;return h<1?'1 · Under 1 hour before':h<6?'2 · 1–6 hours before':h<24?'3 · 6–24 hours before':h<72?'4 · 1–3 days before':'5 · 3+ days before'}],book:['Sportsbook',b=>b.book||'Not recorded']};
+const SEG={league:['League',b=>b.lgn],type:['Bet type',b=>b.m==='prop'?'Player prop':b.m==='other'?'Other':b.m==='tt'?'Team total':b.per?b.per.n+' line':({ml:'Moneyline',spread:'Spread / puck / run line',total:'Total'})[b.m]],side:['Fav / dog',b=>b.m==='total'?(b.sd==='over'?'Over':'Under'):b.sd==='draw'?'Draw':b.m==='spread'&&b.line===0?'Pick em':(b.m==='ml'?b.odds<0:b.line<0)?'Favorite':'Underdog'],timing:['When you bet',b=>{const h=(new Date(b.date)-b.ts)/36e5;return h<1?'1 · Under 1 hour before':h<6?'2 · 1–6 hours before':h<24?'3 · 6–24 hours before':h<72?'4 · 1–3 days before':'5 · 3+ days before'}],book:['Sportsbook',b=>b.book||'Not recorded']};
 function SGP_fix(){SEGP.timing=SEG.timing}
 function parlayInsight(D){const legs=D.flatMap(b=>b.legs).filter(l=>l.status==='W'||l.status==='L');const hit=legs.filter(l=>l.status==='W').length;const one=D.filter(b=>b.status==='L'&&b.legs.filter(l=>l.status==='L').length===1).length;return legs.length?`Your legs hit ${hit}/${legs.length} (${Math.round(hit/legs.length*100)}%). ${one} parlay${one===1?'':'s'} lost by a single leg. Keep in mind each extra leg multiplies the book's cut, so parlays need a bigger edge per leg than straight bets.`:''}
 function insight(t){if(!t.n)return'';if(t.n<30)return`Only ${t.n} settled bet${t.n>1?'s':''}, so profit is mostly luck at this point. Average CLV and how often you beat the close are the numbers to watch until you pass 50–100 bets.`;
@@ -471,7 +475,7 @@ function renderBets(){const nP=getB().filter(b=>b.type==='parlay').length,nS=get
  if(!$('#bMsg').textContent)$('#bMsg').textContent=B.length?'':'No bets yet. Open a game, set your odds, line and stake under the value calculator, and press Log this bet.';
  const tile=(lab,v,cls='',sub='')=>`<div class="tile"><span>${lab}</span><strong class="${cls}">${v}</strong>${sub?`<em>${sub}</em>`:''}</div>`;
  $('#bStats').innerHTML=tile('Record',t.n?t.rec:'—')+tile('Profit',t.n?money(t.prof):'—',t.prof>0?'W':t.prof<0?'L':'')+tile('ROI',t.roi==null?'—':(t.roi*100).toFixed(1)+'%',t.roi>0?'W':t.roi<0?'L':'')+tile('Avg CLV',t.clv==null?'—':(t.clv>0?'+':'')+(t.clv*100).toFixed(1)+'%',t.clv>0?'W':t.clv<0?'L':'')+tile('Beat the close',t.bn?`${t.beat}/${t.bn}`:'—','',t.bn?Math.round(t.beat/t.bn*100)+'%':'')+tile('Expected from CLV',t.exp==null?'—':money(t.exp),t.exp>0?'W':t.exp<0?'L':'',t.exp==null||!t.n?'':'luck '+money(t.prof-t.exp))+tile('Open bets',P.length,'',P.length?'$'+P.reduce((x,b)=>x+b.stake,0).toFixed(0)+' at risk':'');
- $('#bTable').innerHTML=B.length?`<thead><tr><th>Game</th><th>Bet</th><th class="r">Odds</th><th class="r">Stake</th><th class="r">Close</th><th>CLV</th><th>Result</th><th class="r">P/L</th><th></th></tr></thead><tbody>${B.slice(0,st.all?B.length:25).map(b=>b.type==='parlay'?parlayRow(b):`<tr><td>${new Date(b.date).toLocaleDateString([], {month:'numeric',day:'numeric'})} ${esc(b.away)} @ ${esc(b.home)} <span class="note">${esc(b.lgn)}</span>${b.final?`<br><span class="note">${esc(b.final)}</span>`:''}</td><td><b>${esc(b.label)}</b>${b.book?`<br><span class="note">${esc(b.book)}</span>`:''}</td><td class="r num">${fA(b.odds)}</td><td class="r num">$${b.stake.toFixed(2)}</td><td class="r num">${b.close?(b.m==='ml'||b.close.line==null?'':b.m==='total'?b.close.line+' ':fL(b.close.line)+' ')+fA(b.close.odds):'—'}</td><td class="num">${clvTxt(b)}</td><td class="${b.status==='pending'?'':b.status}">${b.status==='pending'?'Open':b.status==='W'?'Win':b.status==='L'?'Loss':'Push'}</td><td class="r num ${b.profit>0?'W':b.profit<0?'L':''}">${b.status==='pending'?'—':money(b.profit)}</td><td><button class="del" data-del="${b.id}" aria-label="Delete bet">Delete</button></td></tr>`).join('')}</tbody>`:'';
+ $('#bTable').innerHTML=B.length?`<thead><tr><th>Game</th><th>Bet</th><th class="r">Odds</th><th class="r">Stake</th><th class="r">Close</th><th>CLV</th><th>Result</th><th class="r">P/L</th><th></th></tr></thead><tbody>${B.slice(0,st.all?B.length:25).map(b=>b.type==='parlay'?parlayRow(b):`<tr><td>${new Date(b.date).toLocaleDateString([], {month:'numeric',day:'numeric'})} ${b.ev?esc(b.away)+' @ '+esc(b.home):''} <span class="note">${esc(b.lgn)}</span>${b.final?`<br><span class="note">${esc(b.final)}</span>`:''}</td><td><b>${esc(b.label)}</b>${b.book?`<br><span class="note">${esc(b.book)}</span>`:''}</td><td class="r num">${fA(b.odds)}</td><td class="r num">$${b.stake.toFixed(2)}</td><td class="r num">${b.close?(b.m==='ml'||b.close.line==null?'':b.m==='total'?b.close.line+' ':fL(b.close.line)+' ')+fA(b.close.odds):'—'}</td><td class="num">${clvTxt(b)}</td><td class="${b.status==='pending'?'':b.status}">${b.status==='pending'?'Open'+`${canMS(b)?msBtns(b):''}`:b.status==='W'?'Win':b.status==='L'?'Loss':'Push'}${b.manual?' <span class="note">(you)</span>':''}</td><td class="r num ${b.profit>0?'W':b.profit<0?'L':''}">${b.status==='pending'?'—':money(b.profit)}</td><td><button class="del" data-del="${b.id}" aria-label="Delete bet">Delete</button></td></tr>`).join('')}</tbody>`:'';
  $('#bMore').innerHTML=B.length>25?`<button class="btn" id="bAll" style="margin-top:8px">${st.all?'Show recent 25':'Show all '+B.length+' bets'}</button>`:'';if($('#bAll'))$('#bAll').onclick=()=>{st.all=!st.all;renderBets()};
  const done=B.filter(b=>b.status!=='pending');const SG=st.bv==='parlay'?SEGP:SEG;SGP_fix();const sk=SG[st.seg]?st.seg:Object.keys(SG)[0];const [,fn]=SG[sk];
  const groups=[...new Set(done.map(fn))].sort();
@@ -486,7 +490,12 @@ function drawChart(){const f=$('#bChart'),svg=f.querySelector('svg');const S=vie
 new ResizeObserver(drawChart).observe($('#bChart'));
 $('#vBets').onclick=()=>{const on=$('#betsView').hidden;$('#betsView').hidden=!on;document.querySelector('main').hidden=on;$('#vBets').textContent=on?'← Back to board':'My bets';if(on){$('#bMsg').textContent='';renderBets();updateBets()}};
 $('#bSettle').onclick=updateBets;
-$('#bTable').onclick=e=>{const d=e.target.closest('[data-del]');if(!d)return;if(!d.dataset.armed){d.dataset.armed=1;d.textContent='Sure?';setTimeout(()=>{if(d.isConnected){delete d.dataset.armed;d.textContent='Delete'}},3000);return}ls.set('ld:del',[...new Set((ls.get('ld:del')||[]).concat(d.dataset.del))]);ls.set('ld:bets',getB().filter(b=>b.id!==d.dataset.del));renderBets()};
+$('#bAdd').onclick=()=>{const f=$('#bAddF');f.hidden=!f.hidden;if(!f.hidden){const d=new Date();$('#aDate').value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;$('#aStake').value=ls.get('ld:stake')??10;$('#aDesc').focus()}};
+$('#aCancel').onclick=()=>{$('#bAddF').hidden=true};
+$('#aSave').onclick=()=>{const d=$('#aDesc').value.trim(),o=num($('#aOdds').value),k=parseFloat($('#aStake').value);if(!d){$('#aMsg').textContent='Describe the bet.';return}if(o==null||Math.abs(o)<100){$('#aMsg').textContent='Enter American odds like -110 or +450.';return}if(!(k>0)){$('#aMsg').textContent='Enter a stake above $0.';return}
+ const dt=$('#aDate').value?new Date($('#aDate').value+'T12:00'):new Date();const B=getB();B.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:Date.now(),p:null,lgn:$('#aLg').value.trim()||'Other',sport:'Other',ev:null,date:dt.toISOString(),away:'',home:'',m:'other',sd:'',label:d,line:null,odds:o,stake:k,book:$('#aBook').value.trim(),fairAtBet:null,status:'pending'});ls.set('ld:bets',B);ls.set('ld:stake',k);
+ $('#bAddF').hidden=true;['aDesc','aLg','aOdds','aBook'].forEach(i=>$('#'+i).value='');$('#bMsg').textContent='Saved. Mark it won, lost or push when it settles.';renderBets()};
+$('#bTable').onclick=e=>{const ms=e.target.closest('[data-ms]');if(ms){const [id,r]=ms.dataset.ms.split('|');manualSettle(id,r);return}const d=e.target.closest('[data-del]');if(!d)return;if(!d.dataset.armed){d.dataset.armed=1;d.textContent='Sure?';setTimeout(()=>{if(d.isConnected){delete d.dataset.armed;d.textContent='Delete'}},3000);return}ls.set('ld:del',[...new Set((ls.get('ld:del')||[]).concat(d.dataset.del))]);ls.set('ld:bets',getB().filter(b=>b.id!==d.dataset.del));renderBets()};
 $('#bExport').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(getB(),null,1)],{type:'application/json'}));a.download='line-desk-bets-'+ymd(new Date())+'.json';document.body.appendChild(a);a.click();a.remove();$('#bMsg').textContent='Backup saved to your downloads.'};
 $('#bImport').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const arr=JSON.parse(await f.text());if(!Array.isArray(arr))throw 0;const m=new Map(getB().map(b=>[b.id,b]));arr.forEach(b=>{if(b&&b.id&&(b.ev||b.legs))m.set(b.id,b)});ls.set('ld:bets',[...m.values()]);$('#bMsg').textContent=`Imported ${arr.length} bets.`;renderBets()}catch(_){$('#bMsg').textContent="That file isn't a Line Desk backup."}e.target.value=''};
 /* ---------- game extras: period scores + compact box scores ---------- */
@@ -547,7 +556,7 @@ function bookTable(ev,rows,F,E,tag){const C=COLS(ev).filter(([k])=>rows.some(r=>
  return`<div class="scroll"><table class="bk"><thead><tr><th>Book</th>${C.map(c=>`<th class="r">${esc(c[1])}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr${r.key==='pinnacle'?' style="background:var(--chip)"':''}><td>${r.key==='pinnacle'?'<b>Pinnacle</b> <span class="note">reference</span>':esc(r.book)}</td>${C.map(([k])=>cell(k,r[k],i)).join('')}</tr>`).join('')}</tbody>
  <tfoot><tr><td>Fair price</td>${C.map(([k])=>`<td class="r num">${F[k]?(F[k].pt!=null&&!k.startsWith('ml')?(k.startsWith('sp')?fL(F[k].pt):F[k].pt)+' ':'')+fA(fair(F[k].p))+`<br><span class="note">${F[k].src==='Pinnacle'?'Pinnacle':'avg'}</span>`:'—'}</td>`).join('')}</tr>
  <tr><td>Best price EV</td>${C.map(([k])=>{const e=best[k];return`<td class="r num ${e&&e.ev!=null?(e.ev>0?'W':'L'):''}">${e&&e.ev!=null?(e.ev>0?'+':'')+(e.ev*100).toFixed(1)+'%':'—'}</td>`}).join('')}</tr></tfoot></table></div>`}
-const legKey=l=>[l.ev,l.m,l.per?l.per.k:'',l.prop?l.prop.pid+'|'+l.prop.mk:''].join('|');
+const legKey=l=>[l.ev,l.m,l.per?l.per.k:'',l.prop?(l.prop.pid||l.prop.name)+'|'+l.prop.mk:'',l.team||''].join('|');
 function addLegObj(l,msg){const L=getSlip();if(L.some(x=>legKey(x)===legKey(l)&&x.sd===l.sd)){msg.textContent='That leg is already on your slip.';return false}
  if(L.some(x=>legKey(x)===legKey(l))){msg.textContent="You can't parlay both sides of the same market.";return false}
  L.push(l);ls.set('ld:slip',L);msg.innerHTML=`Added <b>${esc(l.label)} ${fA(l.odds)}</b> to your parlay slip (${L.length} leg${L.length>1?'s':''}).`;renderSlip();return true}
@@ -654,6 +663,7 @@ async function renderProps(ev,pull){const box=$('#props');if(!box)return;const l
 function setRes(b,r,fin){b.status=r;b.profit=r==='W'?+(b.stake?b.stake*(dec(b.odds)-1):0).toFixed(2):r==='P'?0:-(b.stake||0);if(fin)b.final=fin;return b}
 async function evalSpecial(b){const s=await J(API+b.p+'/summary?event='+b.ev,60000);const comp=g(s,'header','competitions',0);if(!comp||!g(comp,'status','type','completed'))return b;
  const x=await gx({p:b.p,s:b.sport},b.ev);
+ if(b.m==='tt'){const me=b.team==='home'?x.h:x.a;let v;if(b.per){const need=Math.max(...b.per.ps);if(me.ls.length<need)return b;v=b.per.ps.reduce((t,p)=>t+(me.ls[p-1]||0),0)}else v=me.sc;if(v==null)return b;return setRes(b,v===b.line?'P':(v>b.line)===(b.sd==='over')?'W':'L',`${b.team==='home'?b.home:b.away} scored ${v}${b.per?' in the '+b.per.n:''}`)}
  if(b.per){const need=Math.max(...b.per.ps);if(x.h.ls.length<need||x.a.ls.length<need)return b;const hs=b.per.ps.reduce((t,p)=>t+(x.h.ls[p-1]||0),0),as=b.per.ps.reduce((t,p)=>t+(x.a.ls[p-1]||0),0);let r;
   if(b.m==='ml'){const w=hs>as?'home':as>hs?'away':'draw';r=b.sd===w?'W':w==='draw'&&b.sd!=='draw'?'P':'L'}
   else if(b.m==='spread'){const v=(b.sd==='home'?hs-as:as-hs)+b.line;r=v>0?'W':v<0?'L':'P'}
@@ -663,6 +673,50 @@ async function evalSpecial(b){const s=await J(API+b.p+'/summary?event='+b.ev,600
   const v=pl&&d?d[2](pl.v):null;if(v==null)return setRes(b,'P',`${b.prop.name} did not play (void)`);
   return setRes(b,v===b.line?'P':(v>b.line)===(b.sd==='over')?'W':'L',`${b.prop.name}: ${v} ${b.prop.stat.toLowerCase()}`)}
  return b}
+
+/* ---------- Log any bet (manual entry) ---------- */
+async function renderManual(ev){const box=$('#manual');if(!box)return;const lg=st.lg,P=perCfg(lg),M=PROPM[lg.s]||[],soc=lg.s==='Soccer';
+ box.innerHTML=`<div class="calc">
+ <label>Bet type<select id="mType"><option value="ml">Moneyline</option><option value="spread">${esc(LINE[lg.s]==='ATS'?'Spread':LINE[lg.s])}</option><option value="total">Game total</option><option value="tt">Team total</option>${M.length?'<option value="prop">Player prop</option>':''}<option value="other">Other (you settle it)</option></select></label>
+ <label data-f="per">Period<select id="mPer"><option value="">Full game</option>${P.map(p=>`<option value="${p.k}">${esc(p.n)}</option>`).join('')}</select></label>
+ <label data-f="player">Player<input id="mPlayer" list="mPlayers" autocomplete="off" placeholder="Start typing a name"><datalist id="mPlayers"></datalist></label>
+ <label data-f="stat">Stat<select id="mStat">${M.map(([mk,n])=>`<option value="${mk}">${esc(n)}</option>`).join('')}</select></label>
+ <label data-f="side">Pick<select id="mSide"></select></label>
+ <label data-f="desc">Describe the bet<input id="mDesc" placeholder="e.g. Anytime TD scorer, first basket"></label>
+ <label data-f="line">Line<input id="mLine" inputmode="decimal" placeholder="e.g. 24.5"></label>
+ <label>Odds<input id="mOdds" inputmode="numeric" placeholder="-110"></label>
+ <label>Stake $<input id="mStake" type="number" min="0" value="${esc(ls.get('ld:stake')??10)}"></label>
+ <label>Book<input id="mBook" placeholder="DraftKings"></label></div>
+ <div class="row" style="margin-top:8px"><button class="btn pri" id="mLog">Log this bet</button><button class="btn" id="mLeg">Add to parlay</button><span class="note" id="mMsg"></span></div>
+ <p class="note">Everything except "Other" settles itself from the final box score. Player props need the player to appear in ESPN's box score; if he doesn't play, the bet voids like at most books.</p>`;
+ const q=s=>box.querySelector(s),show=(f,on)=>{const el=box.querySelector(`[data-f="${f}"]`);if(el)el.hidden=!on};
+ const a=ev.away.abbr,h=ev.home.abbr;
+ const upd=()=>{const t=q('#mType').value,per=q('#mPer').value;let o=[];
+  if(t==='ml')o=[['away',a],['home',h]].concat(soc||per?[['draw','Draw / tie']]:[]);
+  if(t==='spread')o=[['away',a],['home',h]];
+  if(t==='total'||t==='prop')o=[['over','Over'],['under','Under']];
+  if(t==='tt')o=[['away|over',a+' over'],['away|under',a+' under'],['home|over',h+' over'],['home|under',h+' under']];
+  const v=q('#mSide').value;q('#mSide').innerHTML=o.map(([k,n])=>`<option value="${k}">${esc(n)}</option>`).join('');if(o.some(x=>x[0]===v))q('#mSide').value=v;
+  show('per',t!=='prop'&&t!=='other');show('player',t==='prop');show('stat',t==='prop');show('side',t!=='other');show('desc',t==='other');show('line',t!=='ml'&&t!=='other');q('#mLeg').hidden=t==='other'};
+ q('#mType').onchange=upd;q('#mPer').onchange=upd;upd();
+ const N=nGames(lg);Promise.all([teamGames(lg,ev.away,N).catch(()=>[]),teamGames(lg,ev.home,N).catch(()=>[])]).then(([ra,rh])=>{if(st.sel!==ev.id)return;st.mIdx=playerIndex([[ra,ev.away],[rh,ev.home]]);
+  q('#mPlayers').innerHTML=Object.values(st.mIdx.I).sort((x,y)=>x.team.abbr.localeCompare(y.team.abbr)||x.n.localeCompare(y.n)).map(p=>`<option value="${esc(p.n)}">${esc(p.team.abbr)}</option>`).join('')});
+ const build=need=>{const t=q('#mType').value,odds=num(q('#mOdds').value),stake=parseFloat(q('#mStake').value),book=q('#mBook').value.trim();
+  if(odds==null||Math.abs(odds)<100)return{err:'Enter American odds like -110 or +150.'};if(need&&!(stake>0))return{err:'Enter a stake above $0.'};
+  const base={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),ts:Date.now(),p:lg.p,lgn:lg.n,sport:lg.s,ev:ev.id,date:ev.date,away:a,home:h,odds,stake,book,fairAtBet:null,status:'pending'};
+  if(t==='other'){const d=q('#mDesc').value.trim();if(!d)return{err:'Describe the bet.'};return{b:{...base,m:'other',sd:'',label:d,line:null}}}
+  const per=P.find(p=>p.k===q('#mPer').value),S=per&&t!=='prop'?' '+perShort(per):'';const line=t==='ml'?null:num(q('#mLine').value);if(t!=='ml'&&line==null)return{err:'Enter the line.'};
+  const side=q('#mSide').value;const ou=x=>x==='over'?'Over':'Under';let b={...base,m:t,line,per:per&&t!=='prop'?{k:per.k,n:per.n,ps:per.ps}:undefined};
+  if(t==='ml')Object.assign(b,{sd:side,label:side==='draw'?`Draw${S}`:`${side==='home'?h:a} ML${S}`});
+  if(t==='spread')Object.assign(b,{sd:side,label:`${side==='home'?h:a} ${fL(line)}${S}`});
+  if(t==='total')Object.assign(b,{sd:side,label:`${ou(side)} ${line}${S}`});
+  if(t==='tt'){const [tm,s2]=side.split('|');Object.assign(b,{sd:s2,team:tm,label:`${tm==='home'?h:a} team total ${ou(s2)} ${line}${S}`})}
+  if(t==='prop'){const name=q('#mPlayer').value.trim();if(!name)return{err:'Pick or type a player.'};const d=propDef(lg.s,q('#mStat').value);const p=st.mIdx?findPlayer(st.mIdx,name):null;
+   Object.assign(b,{sd:side,label:`${p?p.n:name} ${ou(side)} ${line} ${d[1].toLowerCase()}`,prop:{pid:p?p.pid:null,name:p?p.n:name,mk:d[0],stat:d[1]}})}
+  return{b}};
+ q('#mLog').onclick=()=>{const r=build(true),m=q('#mMsg');if(r.err){m.textContent=r.err;return}const B=getB();B.push(r.b);ls.set('ld:bets',B);ls.set('ld:stake',r.b.stake);m.innerHTML=`Logged <b>${esc(r.b.label)} ${fA(r.b.odds)}</b>.${r.b.m==='other'?' Mark it won or lost under My bets.':' It settles itself after the game.'}`};
+ q('#mLeg').onclick=()=>{const r=build(false),m=q('#mMsg');if(r.err){m.textContent=r.err;return}delete r.b.stake;addLegObj(r.b,m)}}
+function manualSettle(id,r){const B=getB();const b=B.find(x=>x.id===id);if(!b)return;setRes(b,r);b.manual=true;if(!b.final)b.final='Settled by you';ls.set('ld:bets',B);renderBets()}
 
 const GH='https://api.github.com',GF='line-desk-sync.json',GO='line-desk-odds.json',ODDS_TTL=36e5;
 function localOdds(){const E={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^ld:(oa|pe|pr):/.test(k)){const v=ls.get(k);if(v&&v.t&&Date.now()-v.t<ODDS_TTL)E[k]=v}}}catch(_){}return E}
